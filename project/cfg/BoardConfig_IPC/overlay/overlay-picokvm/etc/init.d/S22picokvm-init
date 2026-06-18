@@ -1,6 +1,6 @@
 #!/bin/sh
 # PicoKVM post-boot init — runs after userdata mount, before appinit
-# Ensures sshd user, authorized_keys, and go.sh customizations persist
+# All persistent customizations that survive firmware upgrades live here.
 
 case "$1" in
 start)
@@ -12,12 +12,48 @@ start)
         sleep .1
     done
 
-    # sshd privilege separation user
+    # ---- sshd privilege separation user ----
     grep -q "^sshd:" /etc/passwd || \
         echo "sshd:x:74:74:sshd:/var/empty/sshd:/sbin/nologin" >> /etc/passwd
     mkdir -p /var/empty/sshd
 
-    # authorized_keys from userdata
+    # ---- Entware /opt symlink ----
+    if [ -d /userdata/opt ] && { [ ! -L /opt ] || [ "$(readlink /opt)" != "/userdata/opt" ]; }; then
+        [ -e /opt ] && [ ! -L /opt ] && rm -rf /opt
+        ln -sf /userdata/opt /opt
+    fi
+
+    # ---- /root -> /userdata/root ----
+    if [ -d /userdata/root ]; then
+        if [ ! -L /root ] || [ "$(readlink /root)" != "/userdata/root" ]; then
+            [ -e /root ] && [ ! -L /root ] && rm -rf /root
+            ln -sf /userdata/root /root
+        fi
+    fi
+
+    # ---- /etc/passwd: root home + shell ----
+    # Prefer Entware zsh, fall back to buildroot zsh, then /bin/sh
+    SHELL_PATH="/bin/sh"
+    [ -x /opt/bin/zsh ] && SHELL_PATH="/opt/bin/zsh"
+    [ -x /bin/zsh ] && [ "$SHELL_PATH" = "/bin/sh" ] && SHELL_PATH="/bin/zsh"
+    WANT="root:x:0:0:root:/userdata/root:${SHELL_PATH}"
+    HAVE="$(grep "^root:" /etc/passwd)"
+    [ "$HAVE" != "$WANT" ] && \
+        sed -i "s|^root:[^:]*:0:0:[^:]*:[^:]*:[^:]*|${WANT}|" /etc/passwd
+
+    # ---- Entware bash override (uClibc bash can't load glibc locales) ----
+    if [ -f /opt/bin/bash ]; then
+        [ ! -e /bin/bash.orig ] && [ -f /bin/bash ] && cp /bin/bash /bin/bash.orig
+        [ "$(readlink /bin/bash 2>/dev/null)" != "/opt/bin/bash" ] && \
+            ln -sf /opt/bin/bash /bin/bash
+    fi
+
+    # ---- /etc/shells ----
+    for sh in /bin/sh /bin/bash /bin/zsh /opt/bin/zsh /opt/bin/bash; do
+        [ -x "$sh" ] && grep -qxF "$sh" /etc/shells 2>/dev/null || echo "$sh" >> /etc/shells
+    done
+
+    # ---- authorized_keys from userdata ----
     if [ -f /userdata/root/.ssh/authorized_keys ]; then
         mkdir -p /root/.ssh
         chmod 700 /root/.ssh
@@ -25,33 +61,69 @@ start)
         chmod 600 /root/.ssh/authorized_keys
     fi
 
-    # Persist SSH host keys across firmware upgrades
-    # Save to /userdata on first boot, restore on subsequent boots
+    # ---- Persist SSH host keys ----
     SSH_KEYS_DIR=/userdata/picokvm/ssh_host_keys
     mkdir -p "$SSH_KEYS_DIR"
     if [ -f "$SSH_KEYS_DIR/ssh_host_rsa_key" ]; then
-        # Restore saved host keys
         cp "$SSH_KEYS_DIR"/ssh_host_*_key* /etc/ssh/ 2>/dev/null
         chmod 600 /etc/ssh/ssh_host_*_key
         chmod 644 /etc/ssh/ssh_host_*_key.pub
     else
-        # First boot — generate keys then save them
         ssh-keygen -A 2>/dev/null
         cp /etc/ssh/ssh_host_*_key* "$SSH_KEYS_DIR/" 2>/dev/null
     fi
 
-    # Persist Tailscale state across firmware upgrades
-    # Symlink /var/lib/tailscale to /userdata so auth survives rootfs writes
+    # ---- Persist Tailscale state ----
     TS_DATA=/userdata/picokvm/tailscale
     mkdir -p "$TS_DATA"
     if [ -d /var/lib/tailscale ] && [ ! -L /var/lib/tailscale ]; then
-        # First boot after upgrade — migrate existing state if any
         cp -a /var/lib/tailscale/* "$TS_DATA/" 2>/dev/null
         rm -rf /var/lib/tailscale
     fi
     [ ! -e /var/lib/tailscale ] && ln -sf "$TS_DATA" /var/lib/tailscale
 
-    # Run go.sh if it exists (Entware, locale, swap, shell config)
+    # ---- Locale (Entware) ----
+    if [ -d /opt/usr/share/i18n ]; then
+        [ -f /opt/bin/localedef.new ] && ln -sf /opt/bin/localedef.new /opt/bin/localedef
+        [ -f /opt/bin/locale.new ] && ln -sf /opt/bin/locale.new /opt/bin/locale
+        mkdir -p /opt/lib/locale
+        if [ ! -d /opt/lib/locale/en_US.UTF-8 ]; then
+            LOCPATH=/opt/lib/locale I18NPATH=/opt/usr/share/i18n \
+                /opt/bin/localedef -i en_US -f UTF-8 /opt/lib/locale/en_US.UTF-8 2>/dev/null
+        fi
+        cat > /etc/profile.d/zz_locale.sh << "LOCALE_EOF"
+export LOCPATH=/opt/lib/locale
+export I18NPATH=/opt/usr/share/i18n
+export PATH=/opt/bin:/opt/sbin:$PATH
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+LOCALE_EOF
+    fi
+
+    # ---- Disable telnet (if SSH is running) ----
+    if [ -f /etc/init.d/S50telnet ] && pidof sshd >/dev/null 2>&1; then
+        /etc/init.d/S50telnet stop 2>/dev/null
+        mv /etc/init.d/S50telnet /etc/init.d/.S50telnet.disabled
+    fi
+    pkill -f /usr/sbin/telnetd 2>/dev/null
+
+    # ---- /oem dotfile symlinks -> /userdata/root ----
+    if [ -d /userdata/root ]; then
+        for f in .zshrc .zshrc.aliases.zsh .zshrc.prompt.zsh .zshrc.zi.zsh \
+                 .zshrc.local.zsh .aliases.local.zsh .gitconfig .vimrc \
+                 .ssh .local .config .vim .tmux .tmux.conf; do
+            src="/userdata/root/$f"
+            dst="/oem/$f"
+            if [ -e "$src" ]; then
+                if [ ! -L "$dst" ] || [ "$(readlink "$dst")" != "$src" ]; then
+                    [ -e "$dst" ] && rm -rf "$dst"
+                    ln -s "$src" "$dst"
+                fi
+            fi
+        done
+    fi
+
+    # ---- Run user go.sh if it exists (user customizations only) ----
     if [ -x /userdata/go.sh ]; then
         /userdata/go.sh > /tmp/go.sh.log 2>&1
     fi
