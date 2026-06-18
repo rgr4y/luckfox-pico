@@ -40,6 +40,17 @@ start)
         cp /etc/ssh/ssh_host_*_key* "$SSH_KEYS_DIR/" 2>/dev/null
     fi
 
+    # Persist Tailscale state across firmware upgrades
+    # Symlink /var/lib/tailscale to /userdata so auth survives rootfs writes
+    TS_DATA=/userdata/picokvm/tailscale
+    mkdir -p "$TS_DATA"
+    if [ -d /var/lib/tailscale ] && [ ! -L /var/lib/tailscale ]; then
+        # First boot after upgrade — migrate existing state if any
+        cp -a /var/lib/tailscale/* "$TS_DATA/" 2>/dev/null
+        rm -rf /var/lib/tailscale
+    fi
+    [ ! -e /var/lib/tailscale ] && ln -sf "$TS_DATA" /var/lib/tailscale
+
     # Run go.sh if it exists (Entware, locale, swap, shell config)
     if [ -x /userdata/go.sh ]; then
         /userdata/go.sh > /tmp/go.sh.log 2>&1
