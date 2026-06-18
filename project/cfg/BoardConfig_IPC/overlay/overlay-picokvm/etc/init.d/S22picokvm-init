@@ -25,6 +25,21 @@ start)
         chmod 600 /root/.ssh/authorized_keys
     fi
 
+    # Persist SSH host keys across firmware upgrades
+    # Save to /userdata on first boot, restore on subsequent boots
+    SSH_KEYS_DIR=/userdata/picokvm/ssh_host_keys
+    mkdir -p "$SSH_KEYS_DIR"
+    if [ -f "$SSH_KEYS_DIR/ssh_host_rsa_key" ]; then
+        # Restore saved host keys
+        cp "$SSH_KEYS_DIR"/ssh_host_*_key* /etc/ssh/ 2>/dev/null
+        chmod 600 /etc/ssh/ssh_host_*_key
+        chmod 644 /etc/ssh/ssh_host_*_key.pub
+    else
+        # First boot — generate keys then save them
+        ssh-keygen -A 2>/dev/null
+        cp /etc/ssh/ssh_host_*_key* "$SSH_KEYS_DIR/" 2>/dev/null
+    fi
+
     # Run go.sh if it exists (Entware, locale, swap, shell config)
     if [ -x /userdata/go.sh ]; then
         /userdata/go.sh > /tmp/go.sh.log 2>&1
