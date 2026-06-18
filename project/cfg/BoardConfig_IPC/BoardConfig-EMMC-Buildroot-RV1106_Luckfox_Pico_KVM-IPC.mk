@@ -75,8 +75,10 @@ export RK_CAMERA_SENSOR_IQFILES="sc3336_CMK-OT2119-PC1_30IRC-F16.json"
 # No IPC web backend
 #export RK_APP_IPCWEB_BACKEND=y
 
-# enable install app to oem partition (oem merged into system for KVM)
-export RK_BUILD_APP_TO_OEM_PARTITION=y
+# NO separate oem partition — merge oem content (ko's, libs, bins) into rootfs /oem/
+# Setting this to anything other than "y" triggers the else branch in build.sh
+# which copies oem output into the rootfs instead of building a separate oem.img
+export RK_BUILD_APP_TO_OEM_PARTITION=n
 
 # enable rockchip test
 export RK_ENABLE_ROCKCHIP_TEST=y
