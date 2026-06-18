@@ -1,0 +1,35 @@
+#!/bin/sh
+# PicoKVM post-boot init — runs after userdata mount, before appinit
+# Ensures sshd user, authorized_keys, and go.sh customizations persist
+
+case "$1" in
+start)
+    # Wait for userdata
+    cnt=0
+    while [ $cnt -lt 30 ]; do
+        cnt=$((cnt + 1))
+        mount | grep -qw userdata && break
+        sleep .1
+    done
+
+    # sshd privilege separation user
+    grep -q "^sshd:" /etc/passwd || \
+        echo "sshd:x:74:74:sshd:/var/empty/sshd:/sbin/nologin" >> /etc/passwd
+    mkdir -p /var/empty/sshd
+
+    # authorized_keys from userdata
+    if [ -f /userdata/root/.ssh/authorized_keys ]; then
+        mkdir -p /root/.ssh
+        chmod 700 /root/.ssh
+        cp /userdata/root/.ssh/authorized_keys /root/.ssh/authorized_keys
+        chmod 600 /root/.ssh/authorized_keys
+    fi
+
+    # Run go.sh if it exists (Entware, locale, swap, shell config)
+    if [ -x /userdata/go.sh ]; then
+        /userdata/go.sh > /tmp/go.sh.log 2>&1
+    fi
+    ;;
+stop)
+    ;;
+esac
