@@ -83,8 +83,13 @@ export RK_BUILD_APP_TO_OEM_PARTITION=n
 # enable rockchip test
 export RK_ENABLE_ROCKCHIP_TEST=y
 
-# No WiFi chip on base KVM board (networking via ethernet + VPN)
-#export RK_ENABLE_WIFI=y
+# RTL8821CU USB combo dongle (AC600 WiFi + Bluetooth 4.2), device 0bda:c820.
+# WiFi driver built from sysdrv/drv_ko/wifi/rtl8821cu (morrownr 8821cu).
+# Bluetooth stack built as modules via the rv1106-kvm.config fragment.
+# Runtime load + association handled by overlay init scripts:
+#   S30rtldrv (drivers) -> S40bluetoothd (bluez) -> S45wifi (wpa/dhcp).
+export RK_ENABLE_WIFI=y
+export RK_ENABLE_WIFI_CHIP=RTL8821CU
 
 #################################################
 #  PRE and POST

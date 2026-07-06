@@ -63,6 +63,15 @@ ifneq ($(findstring $(RK_ENABLE_WIFI_CHIP),"AIC8800MC"),)
 	@make -C aic8800_netdrv/
 endif
 
+# RTL8821CU USB combo dongle (AC600 WiFi), device 0bda:c820 — morrownr driver.
+# The vendor Makefile hard-codes KSRC/ARCH for a PC build; command-line
+# assignments below override those for the SDK cross-build.
+ifneq ($(findstring $(RK_ENABLE_WIFI_CHIP),"RTL8821CU"),)
+	@make -C rtl8821cu/ ARCH=arm CROSS_COMPILE=$(CROSS_COMPILE) \
+		KSRC=$(WIFI_BUILD_KERNEL_OBJ_DIR) modules
+	@cp -f rtl8821cu/8821cu.ko $(M_OUT_DIR)/
+endif
+
 build-sdio:
 ifneq ($(findstring $(RK_ENABLE_WIFI_CHIP),"RTL8189FS"),)
 	@make -C rtl8189fs/
@@ -124,5 +133,6 @@ build-usb-clean:
 	@make -C ssv6x5x clean
 	@make -C ssv6115 clean
 	@make -C aic8800_usb clean
+	@make -C rtl8821cu clean
 
 clean: $(PKG_CLEAN_TARGET)
