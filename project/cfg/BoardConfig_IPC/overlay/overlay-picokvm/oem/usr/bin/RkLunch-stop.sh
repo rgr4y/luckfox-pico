@@ -25,8 +25,8 @@ rcK()
 }
 
 echo "Stop Application ..."
-killall kvm_app
-killall udhcpc
+killall kvm_app 2>/dev/null
+killall udhcpc 2>/dev/null
 
 while [ 1 ];
 do
