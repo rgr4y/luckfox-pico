@@ -69,6 +69,23 @@
 	status = "okay";
 };
 
+/**********SDIO (ESP-Hosted WiFi) — see docs/esp-hosted-sdio-plan.md**********/
+/* Dedicated sdio controller @ff9a0000 (separate from the SD-card sdmmc above).
+ * m0 mux = GPIO2_A0-A5 → header pins 21/22/24/25/26/27, verified UNCLAIMED.
+ * 4-bit @ 50MHz, 3.3V. Needs ESP-Hosted-NG slave fw + esp32_sdio module. */
+&sdio {
+	bus-width = <4>;
+	cap-sd-highspeed;
+	cap-sdio-irq;
+	keep-power-in-suspend;
+	non-removable;
+	no-1-8-v;
+	max-frequency = <50000000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&sdmmc1m0_clk &sdmmc1m0_cmd &sdmmc1m0_bus4>;
+	status = "okay";
+};
+
 /**********ETH**********/
 &gmac {
 	status = "okay";
