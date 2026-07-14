@@ -1,0 +1,64 @@
+#!/bin/sh
+# zram-backed swap for the RV1106 (256MB RAM).
+# Requires a kernel with CONFIG_ZRAM=y + CONFIG_ZSMALLOC=y + CONFIG_CRYPTO_ZSTD=y
+# (builtin, no module). /dev/zram0 exists at boot (num_devices=1, devtmpfs).
+#
+# Runs at S14, BEFORE S15sdmount, so zram is the primary (and only) swap.
+# NOTE: BusyBox swapon has no -p/priority flag on this board, so priority is
+# not set here; the SD swapfile swapon in S15sdmount is disabled instead, which
+# makes zram the sole swap. Idempotent.
+
+ZDEV=/dev/zram0
+ZSYS=/sys/block/zram0
+DISKSIZE=384M          # ~1.5x RAM; virtual cap, real usage bounded by free RAM
+COMP=zstd              # falls back to lzo if zstd not available in kernel
+SWAPPINESS=150         # zram is fast; bias hard toward swap (kernel max = 200)
+
+start() {
+	# Already swapping on zram0? Nothing to do.
+	if grep -q "^$ZDEV " /proc/swaps 2>/dev/null; then
+		echo "zram: already active"
+		return 0
+	fi
+
+	# Ensure the device exists (hot_add fallback if devtmpfs node missing).
+	if [ ! -e "$ZSYS" ] && [ -w /sys/class/zram-control/hot_add ]; then
+		cat /sys/class/zram-control/hot_add >/dev/null 2>&1
+	fi
+	if [ ! -e "$ZSYS" ]; then
+		echo "zram: /dev/zram0 not present (CONFIG_ZRAM missing?)" >&2
+		return 1
+	fi
+
+	# Reset in case a previous partial setup left it configured.
+	[ -w "$ZSYS/reset" ] && echo 1 > "$ZSYS/reset" 2>/dev/null
+
+	# Pick compressor: prefer zstd, fall back to lzo (always present).
+	if grep -qw "$COMP" "$ZSYS/comp_algorithm" 2>/dev/null; then
+		echo "$COMP" > "$ZSYS/comp_algorithm"
+	else
+		echo "zram: $COMP unavailable, using kernel default" >&2
+	fi
+
+	echo "$DISKSIZE" > "$ZSYS/disksize"
+	/sbin/mkswap "$ZDEV" >/dev/null 2>&1
+	/sbin/swapon "$ZDEV" && echo "zram: swapon $ZDEV ($DISKSIZE, $(cat $ZSYS/comp_algorithm 2>/dev/null | tr -d '[]' ))"
+	sysctl -w vm.swappiness=$SWAPPINESS >/dev/null 2>&1
+}
+
+stop() {
+	if grep -q "^$ZDEV " /proc/swaps 2>/dev/null; then
+		/sbin/swapoff "$ZDEV" 2>/dev/null
+	fi
+	[ -w "$ZSYS/reset" ] && echo 1 > "$ZSYS/reset" 2>/dev/null
+}
+
+case "$1" in
+	start) start ;;
+	stop)  stop ;;
+	restart|reload) stop; start ;;
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac
