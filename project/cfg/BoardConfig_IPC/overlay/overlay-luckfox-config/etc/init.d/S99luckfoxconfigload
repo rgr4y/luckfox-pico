@@ -1,7 +1,16 @@
 #!/bin/sh
+# luckfox-config applies pin overlays from /etc/luckfox.cfg by decompiling and
+# recompiling the FDT at runtime (dtc + fdtdump + fdtoverlay, ~2.3s). Skip that
+# whole dance unless there's actual config to apply: an empty/absent cfg means
+# the base device tree already has everything, so re-deriving it every boot is
+# pure boot-time cost. Anyone who configures a pin via luckfox-config gets a
+# populated cfg and the load runs exactly as before -- no behavior removed.
+CFG=/etc/luckfox.cfg
 
 load_luckfoxconfig() {
-	if [ -f /usr/bin/luckfox-config ]; then
+	[ -x /usr/bin/luckfox-config ] || return 0
+	# effective config = at least one non-blank, non-comment line
+	if [ -s "$CFG" ] && grep -qvE '^[[:space:]]*(#|$)' "$CFG" 2>/dev/null; then
 		luckfox-config load
 	fi
 }
