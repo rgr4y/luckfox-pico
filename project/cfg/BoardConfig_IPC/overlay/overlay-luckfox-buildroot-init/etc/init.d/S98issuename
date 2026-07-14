@@ -1,0 +1,40 @@
+#!/bin/sh
+# Fill the @@BANNER_NAME@@ token in /etc/issue once, at first boot.
+# The shipped /etc/issue carries generic figlet art + a token subtitle so the
+# same image self-labels on any board: "<model minus Luckfox> <nominal RAM>mb",
+# centered under the art. After substitution the token is gone, so this is a
+# one-shot (subsequent boots grep-miss and exit immediately -> ~0 boot cost).
+ISSUE=/etc/issue
+WIDTH=55   # visible banner width = the "oooo..." separator rows
+
+case "$1" in
+start)
+	grep -q '@@BANNER_NAME@@' "$ISSUE" 2>/dev/null || exit 0
+
+	# model: /proc/device-tree/model = "Luckfox Pico Pro Max" -> "pico pro max"
+	model=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null)
+	model=$(echo "$model" | sed 's/^Luckfox //I' | tr 'A-Z' 'a-z')
+	[ -z "$model" ] && model="luckfox pico"
+
+	# RAM: MemTotal kB -> smallest nominal size that fits (256MB DDR reports ~242M)
+	kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+	mb=$((kb / 1024))
+	ram=""
+	for n in 64 128 256 512 1024 2048; do
+		[ "$mb" -le "$n" ] && { ram=$n; break; }
+	done
+	[ -z "$ram" ] && ram=$mb
+
+	name="$model ${ram}mb"
+
+	# center within WIDTH
+	len=${#name}
+	pad=$(( (WIDTH - len) / 2 ))
+	[ "$pad" -lt 0 ] && pad=0
+	spaces=$(printf "%${pad}s" "")
+
+	new=$(awk -v repl="${spaces}${name}" '{ if ($0 ~ /@@BANNER_NAME@@/) print repl; else print }' "$ISSUE")
+	printf '%s\n' "$new" > "$ISSUE"
+	;;
+stop) ;;
+esac
