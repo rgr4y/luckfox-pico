@@ -1,0 +1,10 @@
+#!/bin/sh
+
+ENABLED=yes
+PROCS=tailscaled
+ARGS="--state=/opt/var/tailscaled.state --statedir=/opt/var/lib/tailscale --tun=userspace-networking --socks5-server=localhost:1055 &"
+PREARGS="nohup"
+DESC=$PROCS
+PATH=/opt/sbin:/opt/bin:/opt/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+. /opt/etc/init.d/rc.func
