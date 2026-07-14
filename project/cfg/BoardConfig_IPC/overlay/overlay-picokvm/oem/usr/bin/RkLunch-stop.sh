@@ -2,7 +2,7 @@
 
 rcK()
 {
-	for i in $(ls /oem/usr/etc/init.d/S??*) ;do
+	for i in $(ls /oem/usr/etc/init.d/S??* 2>/dev/null) ;do
 
 		# Ignore dangling symlinks (if any).
 		[ ! -f "$i" ] && continue

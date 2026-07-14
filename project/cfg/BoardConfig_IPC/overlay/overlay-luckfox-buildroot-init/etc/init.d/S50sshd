@@ -20,7 +20,7 @@ start() {
 }
 stop() {
 	printf "Stopping sshd: "
-	killall sshd
+	killall sshd 2>/dev/null
 	rm -f /var/lock/sshd
 	echo "OK"
 }
