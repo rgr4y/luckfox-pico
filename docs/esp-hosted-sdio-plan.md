@@ -41,8 +41,15 @@ The `sdio` controller (`sdmmc1` in pinctrl terms) has two pin muxes:
 | D1   | GPIO2_A0     | 64    | **24**     |
 | D2   | GPIO2_A5     | 69    | **22**     |
 | D3   | GPIO2_A4     | 68    | **21**     |
+| CD   | GPIO2_A6     | 70    | I2C3_M0_SCL pad |
 
 GND at header pin 23 (adjacent). 3V3 from pin 36 (3V3 OUT).
+
+**CD (card-detect)** is not standard SDIO — it's how we keep an empty slot silent
+(see Step 1). Wire the ESP32's ready/present line (any spare ESP GPIO, driven LOW
+when the ESP is up) to GPIO2_A6. Active-low = card present; an internal pull-up
+holds it HIGH (no card) when the ESP is off/absent, so a board with no ESP boots
+clean. Confirm the GPIO2_A6 pad against the board silkscreen before soldering.
 
 ### Live-board proof the pins are free
 
@@ -75,17 +82,35 @@ zram kernel went to, so this rides a boot.img rebuild):
 	cap-sd-highspeed;
 	cap-sdio-irq;
 	keep-power-in-suspend;
-	non-removable;
+	/* card-detect (NOT non-removable) so an empty slot is silent at boot:
+	 * mmc_rescan sees get_cd()==0 -> powers the host off -> no probe, no
+	 * "error -110 whilst initialising SDIO card". */
+	cd-gpios = <&gpio2 RK_PA6 GPIO_ACTIVE_LOW>;
 	no-1-8-v;                 /* ESP32 SDIO slave is 3.3V */
 	max-frequency = <50000000>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&sdmmc1m0_clk &sdmmc1m0_cmd &sdmmc1m0_bus4>;
+	pinctrl-0 = <&sdmmc1m0_clk &sdmmc1m0_cmd &sdmmc1m0_bus4 &sdio_cd_pin>;
 	status = "okay";
+};
+
+&pinctrl {
+	sdio {
+		sdio_cd_pin: sdio-cd-pin {
+			rockchip,pins = <2 RK_PA6 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
 };
 ```
 
 Pinctrl group labels (already defined in `rv1106-pinctrl.dtsi`, `sdmmc1` block):
-`sdmmc1m0_clk`, `sdmmc1m0_cmd`, `sdmmc1m0_bus4` (d0–d3).
+`sdmmc1m0_clk`, `sdmmc1m0_cmd`, `sdmmc1m0_bus4` (d0–d3). `sdio_cd_pin` is our
+own group (GPIO2_A6 as GPIO with pull-up) for the ESP ready/present line.
+
+**Why card-detect over `non-removable`:** with `non-removable` the MMC core
+scans the slot once at boot even when empty and logs an SDIO init error; there
+is no on-chip route to suppress it. A `cd-gpios` line lets `mmc_rescan` take the
+`get_cd()==0` early-out (`drivers/mmc/core/core.c`), powering the host off
+silently. Costs one wire from the ESP; makes the no-ESP case boot clean.
 
 Optional: a `mmc-pwrseq-simple` node wired to an ESP reset GPIO for clean
 power-on ordering. Not required for first bring-up.
