@@ -1,0 +1,16 @@
+#!/bin/sh
+# Reduce ubifs flash writes: drop atime on the writable volumes.
+# NOTE: must remount here as a VFS flag — do NOT use rootflags=noatime in the
+# kernel cmdline; this ubifs's parse_options rejects the "noatime" string and
+# panics (unable to mount root). remount,noatime sets the VFS flag correctly.
+case "$1" in
+	start)
+		mount -o remount,noatime / 2>/dev/null
+		mount -o remount,noatime /userdata 2>/dev/null
+		;;
+	stop) ;;
+	*)
+		echo "Usage: $0 {start|stop}"
+		exit 1
+		;;
+esac

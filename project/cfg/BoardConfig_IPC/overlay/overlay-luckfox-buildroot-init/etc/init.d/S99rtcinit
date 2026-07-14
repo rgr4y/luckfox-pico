@@ -6,8 +6,6 @@ start)
 		echo "RTC time calibration"
 		date -s 2024-01-01
 		hwclock -w
-	else
-		echo "RTC does not require time calibration"
 	fi
 	;;
 *)
