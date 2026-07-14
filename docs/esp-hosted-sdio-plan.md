@@ -93,13 +93,34 @@ power-on ordering. Not required for first bring-up.
 ## Step 2 — Kernel module (ESP-Hosted-NG)
 
 `esp32_sdio` is an **out-of-tree** module — build against this 5.10 tree using the
-**same container pipeline as the zram build** (git-archive kernel into the
-case-sensitive fs in the `lfbuild` amd64 container, `arm-rockchip830-...` toolchain).
+**Status: integrated + build-verified.** The NG host driver
+(`espressif/esp-hosted`, `esp_hosted_ng/host/`) is vendored at
+`sysdrv/drv_ko/esp_hosted/` (source + wrapper Makefile) and wired into
+`sysdrv/drv_ko/Makefile` `M_DIRS`, so a normal `./build.sh` compiles
+`esp32_sdio.ko` into the rootfs `/ko`. It is deliberately **absent from
+`sysdrv/drv_ko/insmod_ko.sh`** → shipped but NOT auto-loaded (install image →
+wire ESP → `modprobe`).
 
-- Repo: `espressif/esp-hosted`, `esp_hosted_ng/host/` Linux driver.
-- Build as a module (`.ko`) against the RV1106 `KDIR`; stage under an overlay so
-  it survives image rebuilds.
-- Loads: `modprobe esp32_sdio` → registers `wlan0` via cfg80211.
+Three fixes were required to build the upstream driver against this SDK's strict
+5.10 kernel (all live in the vendored copy):
+- `host/Makefile`: `ccflags-y += -Wno-error=declaration-after-statement`
+  (kernel forces `-Werror`; driver isn't C90-clean).
+- `host/Makefile`: `CC=$(CROSS_COMPILE)gcc` on the modules line — bypasses
+  Rockchip's `scripts/gcc-wrapper.py` forbidden-warning gate for this module.
+- `host/main.c`: `MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver)`
+  — driver uses `filp_open`/`kernel_read` (guarded VFS symbol namespace in 5.10).
+
+Kernel deps (defconfig): `CONFIG_CFG80211=m` (already present) + **`CONFIG_BT=m`**
+(added — the driver bundles BT-over-HCI; also lights up the rtl8821cu BT half,
+whose `rtl_bt` firmware was already shipped but had no stack). Both are modules.
+
+Built on Google Cloud Shell via the `Dockerfile.build` image (native x86, no
+case-collision hack). Runtime, after wiring the ESP:
+```sh
+modprobe esp32_sdio      # pulls cfg80211 + bluetooth (if depmod ran)
+dmesg | grep -iE "esp32|wlan"
+ip link show wlan0
+```
 
 ## Step 3 — boot.img rebuild + flash (fold into zram pipeline)
 
