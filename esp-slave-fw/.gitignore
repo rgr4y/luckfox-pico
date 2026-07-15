@@ -1,0 +1,8 @@
+# IDF build output
+network_adapter/build/
+network_adapter/sdkconfig
+network_adapter/sdkconfig.old
+network_adapter/managed_components/
+network_adapter/dependencies.lock
+# PlatformIO
+.pio/
