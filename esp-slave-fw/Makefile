@@ -4,7 +4,8 @@
 # on macOS), so they need esptool + pyserial locally: `pip install esptool pyserial`.
 #
 #   make            build -> network_adapter/build/network_adapter.bin
-#   make flash PORT=/dev/tty.usbmodem*      flash over USB (download mode: BOOT+RST)
+#   make flash PORT=/dev/cu.usbmodem*       flash over USB (download mode: BOOT+RST)
+#                                           (macOS: cu.usbmodem* — NOT tty.*; Linux: /dev/ttyACM0)
 #   make monitor PORT=...                   serial monitor @115200
 #   make menuconfig                         tweak transport/config
 #   make clean | make shell | make bin | make help

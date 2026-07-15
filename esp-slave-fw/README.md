@@ -13,7 +13,7 @@ cfg80211 `wlan0` on the Linux host over an **SDIO** transport.
 
 ```sh
 make                    # -> network_adapter/build/network_adapter.bin
-make flash PORT=/dev/tty.usbmodem*    # host esptool; download mode = BOOT+RST
+make flash PORT=/dev/cu.usbmodem*     # host esptool; download mode = BOOT+RST (macOS cu.*, not tty.*)
 make monitor PORT=...                 # serial @115200
 make menuconfig | clean | shell | bin | help
 ```
