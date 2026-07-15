@@ -162,13 +162,40 @@ flashcp -v /mnt/sdcard/boot-sdio.img /dev/mtd3
 Rollback: `flashcp -v /mnt/sdcard/mtd3-boot.backup /dev/mtd3` (or the earlier
 zram backup). Worst case: BOOT-button maskrom + `upgrade_tool`.
 
-## Step 4 — ESP32 slave
+## Step 4 — ESP slave = **ESP32-C6** (chosen)
 
-- Flash **ESP-Hosted-NG slave firmware** for your ESP32 variant (SDIO transport).
-- ESP32 SDIO-slave pins are **fixed in silicon** (classic ESP32):
-  CLK=IO14, CMD=IO15, D0=IO2, D1=IO4, D2=IO12, D3=IO13. Verify for your exact
-  chip (S3/C-series differ).
-- Wire ESP pins ↔ RV1106 header pins per the map above (CLK↔CLK, etc.).
+Only ESP32 (classic), C5, C6 have the SDIO-**slave** peripheral. S3/C3 are host-
+or SPI-slave-only — they physically cannot be the SDIO device (their SDMMC block
+is host-side; there's no `sdio_slave` IDF driver for them). Picked **C6**: WiFi 6
++ BLE5 + 802.15.4 (Thread/Zigbee), and its SDIO-slave pins are a clean run.
+
+**C6 SDIO-slave GPIOs (fixed, verified against esp-hosted-mcu `docs/sdio.md`):**
+
+| Signal | C6 GPIO | RV1106 header pin / GPIO | 51k pull-up → 3V3 |
+|--------|---------|--------------------------|-------------------|
+| CLK    | 19      | 26 / GPIO2_A2            | —                 |
+| CMD    | 18      | 27 / GPIO2_A3            | **✓**             |
+| D0     | 20      | 25 / GPIO2_A1            | **✓**             |
+| D1     | 21      | 24 / GPIO2_A0            | **✓**             |
+| D2     | 22      | 22 / GPIO2_A5            | **✓**             |
+| D3     | 23      | 21 / GPIO2_A4            | **✓**             |
+| CD/rdy | spare   | GPIO2_A6 pad             | (RV internal PU)  |
+| GND    | GND     | 23                       | —                 |
+| 3V3    | 3V3     | 36 (or C6 self-powered)  | —                 |
+
+- Both sides contiguous: RV1106 pins 21–27 (23=GND mid-block); C6 GPIO18–23.
+- Pull-ups **mandatory** (Espressif: 51k rec; 10k also works). D2/D3 pull-ups
+  also stop the slave dropping into SPI boot mode. DevKitC doesn't populate them.
+- **CD/ready line:** (1) best — C6 firmware drives a spare GPIO LOW when its SDIO
+  slave is up → clean enumerate, no boot race; (2) simplest — tie GPIO2_A6 to C6
+  GND (present whenever the board is attached; may cost one `mmc_rescan` if the C6
+  boots slower). No C6 board → RV pull-up → slot stays silent.
+
+**⚠ host-driver ↔ slave-fw pairing — verify before flashing fw:** the host `.ko`
+we vendored is **ESP-Hosted-NG** (`esp32_sdio.ko`, `target=sdio`). C6 slave support
+may live in the newer **esp-hosted / esp-hosted-mcu** stack, which pairs with its
+own Linux host driver — NOT necessarily NG. Confirm C6 is a supported NG slave
+target, else switch the host side to match the C6 slave firmware's generation.
 
 ---
 
