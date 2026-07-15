@@ -162,40 +162,58 @@ flashcp -v /mnt/sdcard/boot-sdio.img /dev/mtd3
 Rollback: `flashcp -v /mnt/sdcard/mtd3-boot.backup /dev/mtd3` (or the earlier
 zram backup). Worst case: BOOT-button maskrom + `upgrade_tool`.
 
-## Step 4 — ESP slave = **ESP32-C6** (chosen)
+## Step 4 — ESP slave = **DFRobot FireBeetle 2 ESP32-C5** (chosen)
 
 Only ESP32 (classic), C5, C6 have the SDIO-**slave** peripheral. S3/C3 are host-
-or SPI-slave-only — they physically cannot be the SDIO device (their SDMMC block
-is host-side; there's no `sdio_slave` IDF driver for them). Picked **C6**: WiFi 6
-+ BLE5 + 802.15.4 (Thread/Zigbee), and its SDIO-slave pins are a clean run.
+or SPI-slave-only (their SDMMC block is host-side; no `sdio_slave` IDF driver).
+Picked the **C5** (have one): dual-band WiFi 6 (2.4+5GHz), and it's the throughput
+king — ESP-Hosted-NG bench: **C5 SDIO 5GHz ≈ 63/52 TCP, 97/81 UDP Mbps** vs ESP32
+22.9/15.6 and C6 22.4/25.6. NG supports C5 as a slave (variant table: ESP32,
+C2/C3/C5/C6/C61, S2/S3), cfg80211 → real `wlan0`.
 
-**C6 SDIO-slave GPIOs (fixed, verified against esp-hosted-mcu `docs/sdio.md`):**
+**C5 SDIO-slave GPIOs (fixed IO_MUX, verified vs esp-hosted-mcu `docs/sdio.md`):**
 
-| Signal | C6 GPIO | RV1106 header pin / GPIO | 51k pull-up → 3V3 |
-|--------|---------|--------------------------|-------------------|
-| CLK    | 19      | 26 / GPIO2_A2            | —                 |
-| CMD    | 18      | 27 / GPIO2_A3            | **✓**             |
-| D0     | 20      | 25 / GPIO2_A1            | **✓**             |
-| D1     | 21      | 24 / GPIO2_A0            | **✓**             |
-| D2     | 22      | 22 / GPIO2_A5            | **✓**             |
-| D3     | 23      | 21 / GPIO2_A4            | **✓**             |
-| CD/rdy | spare   | GPIO2_A6 pad             | (RV internal PU)  |
-| GND    | GND     | 23                       | —                 |
-| 3V3    | 3V3     | 36 (or C6 self-powered)  | —                 |
+| Signal | C5 GPIO | FireBeetle access            | RV1106 pin / GPIO | 51k PU→3V3 |
+|--------|---------|------------------------------|-------------------|------------|
+| CLK    | IO9     | header `9/SDA`               | 26 / GPIO2_A2     | —          |
+| CMD    | IO10    | header `10/SCL`              | 27 / GPIO2_A3     | **✓**      |
+| D0     | IO8     | header `8/D2`                | 25 / GPIO2_A1     | **✓**      |
+| D1     | IO7     | header `7/D11`               | 24 / GPIO2_A0     | **✓** †    |
+| D2     | IO14    | **USB D+ — R3 pad, lift R3** | 22 / GPIO2_A5     | **✓**      |
+| D3     | IO13    | **USB D- — R2 pad, lift R2** | 21 / GPIO2_A4     | **✓**      |
+| CD/rdy | spare   | any spare GPIO, drive LOW=up | GPIO2_A6 pad      | (RV int PU)|
+| GND    | GND     | GND                          | 23                | —          |
+| 3V3    | 3V3     | 3V3 (or self-power via USB-C)| 36                | —          |
 
-- Both sides contiguous: RV1106 pins 21–27 (23=GND mid-block); C6 GPIO18–23.
-- Pull-ups **mandatory** (Espressif: 51k rec; 10k also works). D2/D3 pull-ups
-  also stop the slave dropping into SPI boot mode. DevKitC doesn't populate them.
-- **CD/ready line:** (1) best — C6 firmware drives a spare GPIO LOW when its SDIO
-  slave is up → clean enumerate, no boot race; (2) simplest — tie GPIO2_A6 to C6
-  GND (present whenever the board is attached; may cost one `mmc_rescan` if the C6
-  boots slower). No C6 board → RV pull-up → slot stays silent.
+- RV1106 pins 21–27 = one block (23=GND mid). C5 side: 4 on headers + 2 tapped.
+- **DAT2/DAT3 = IO14/IO13 = the C5's native USB D±** (schematic: R3=D+/USB_P,
+  R2=D-/USB_N, 22R series). They're NOT on the FireBeetle headers — only at the
+  USB-C data pins. Tap the module side of R2/R3 and **lift R2/R3** to isolate the
+  connector (USB-C then = power + ROM-download only, no runtime USB data — fine
+  for a headless WiFi co-proc). ROM/boot log still comes out **UART0** (default
+  on, datasheet Table 4-5); flash via USB-JTAG download mode (BOOT+RST) *before*
+  lifting R2/R3, or via UART0 after.
+- Pull-ups **mandatory** (Espressif: 51k rec; 10k fine). D2/D3 pull-ups also stop
+  the slave falling into SPI boot mode.
+- **† IO7 (DAT1) is also the JTAG-source strap** (datasheet §4.4): no internal
+  pull, must not be high-Z at boot. The mandatory DAT1 pull-up satisfies that —
+  one resistor, two jobs.
+- **Clock-edge tuning:** GPIO25 + MTDI set SDIO sample/drive edges (Table 4-4,
+  floating default). If the link is flaky at `max-frequency`, flip these before
+  suspecting wiring.
+- **CD/ready:** C5 firmware drives a spare GPIO LOW when its SDIO slave is up →
+  clean enumerate; or tie GPIO2_A6 to C5 GND (present when board attached, may
+  cost one `mmc_rescan`). No C5 → RV pull-up → slot silent.
 
-**⚠ host-driver ↔ slave-fw pairing — verify before flashing fw:** the host `.ko`
-we vendored is **ESP-Hosted-NG** (`esp32_sdio.ko`, `target=sdio`). C6 slave support
-may live in the newer **esp-hosted / esp-hosted-mcu** stack, which pairs with its
-own Linux host driver — NOT necessarily NG. Confirm C6 is a supported NG slave
-target, else switch the host side to match the C6 slave firmware's generation.
+**Flash order (avoid a chicken-and-egg):** flash the C5 NG slave firmware over
+USB-C *first* (IO13/14 still = USB), then lift R2/R3 + solder the 6 SDIO leads.
+Reflashes after that go over UART0 download mode.
+
+**⚠ host-driver ↔ slave-fw generation — verify before building fw:** the host
+`.ko` we vendored is **ESP-Hosted-NG** (`esp32_sdio.ko`, `target=sdio`). Confirm
+the vendored NG snapshot actually includes **C5** slave support (C5 is recent) —
+if the NG tree is too old, re-vendor latest NG or move host+slave to the unified
+`esp-hosted` stack together (never mix generations across the link).
 
 ---
 
@@ -206,8 +224,10 @@ target, else switch the host side to match the C6 slave firmware's generation.
 - **Wire length.** SDIO @ 50 MHz is intolerant of long leads. Short soldered
   jumpers, not long DuPont. If flaky: drop `max-frequency`, or fall back to
   `bus-width = <1>`.
-- **ESP32 strapping pins.** IO2/IO12 are boot-strapping pins — respect
-  ESP-Hosted's documented pull requirements or the ESP won't boot.
+- **C5 strapping pins on the bus.** IO7 (DAT1) = JTAG-source strap (must not be
+  high-Z — the DAT1 pull-up covers it); IO28 (BOOT) = SPI-boot strap; GPIO25/MTDI
+  = SDIO clock-edge select. See Step 4. (N/A note: on a *classic* ESP32 the trap
+  is instead IO12/MTDI = flash-voltage strap → needs `espefuse set_flash_voltage`.)
 - **3.3V only** (`no-1-8-v` set). Do not enable 1.8V signaling.
 
 ## Post-bringup verification
