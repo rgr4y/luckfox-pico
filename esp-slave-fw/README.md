@@ -9,12 +9,16 @@ cfg80211 `wlan0` on the Linux host over an **SDIO** transport.
 - Transport: **SDIO** — the C5 Kconfig default (`ESP_SDIO_HOST_INTERFACE if SOC_SDIO_SLAVE_SUPPORTED`). No menuconfig change needed.
 - Host/slave generations MUST match: both NG. Don't pair this with the `esp_hosted`/MCU component.
 
-## Build (reproducible, no local IDF) — recommended
+## Build — just `make` (Docker idf, no local IDF)
 
 ```sh
-./build.sh              # docker + espressif/idf:v5.5.1, target esp32c5
-# -> network_adapter/build/network_adapter.bin
+make                    # -> network_adapter/build/network_adapter.bin
+make flash PORT=/dev/tty.usbmodem*    # host esptool; download mode = BOOT+RST
+make monitor PORT=...                 # serial @115200
+make menuconfig | clean | shell | bin | help
 ```
+Build runs in `espressif/idf:v5.5.1` (Docker). flash/monitor run on the host —
+`pip install esptool pyserial`. (`./build.sh` is the same build without make.)
 
 ## Build (local ESP-IDF >= v5.5)
 
