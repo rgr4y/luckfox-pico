@@ -1,0 +1,6 @@
+# build context = this dir; only lib/ + rom.patch are needed by the Dockerfile.
+network_adapter/build/
+network_adapter/sdkconfig
+network_adapter/managed_components/
+esp-idf/
+.pio/

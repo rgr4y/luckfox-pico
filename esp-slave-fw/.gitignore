@@ -4,5 +4,7 @@ network_adapter/sdkconfig
 network_adapter/sdkconfig.old
 network_adapter/managed_components/
 network_adapter/dependencies.lock
+# local esp-idf clone (if you run setup.sh natively instead of Docker)
+esp-idf/
 # PlatformIO
 .pio/
