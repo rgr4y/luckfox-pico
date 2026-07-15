@@ -22,7 +22,8 @@ DRUNIT  = docker run --rm -it -v "$(CURDIR)/$(PROJ):/project" -w /project $(IMG)
 all: build
 
 image:
-	@docker build -q -t $(IMG) . >/dev/null
+	@echo ">> building $(IMG) image (first run pulls espressif/idf:v5.5.1, ~few GB — not hung)"
+	docker build -t $(IMG) .
 
 build: image
 	$(DRUN) bash -lc 'idf.py set-target $(TARGET) && idf.py build'
