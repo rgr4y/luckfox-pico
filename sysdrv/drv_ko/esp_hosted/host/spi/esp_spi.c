@@ -445,11 +445,32 @@ static struct spi_controller *spi_busnum_to_master(u16 bus_num)
 }
 #endif
 
+/* Pulse the C5 EN (RESET_PIN) low->high so the slave reboots under driver control.
+ * Called before the rising-edge IRQs are armed: the C5's post-boot HANDSHAKE/
+ * DATA_READY assertion then lands as a fresh edge the armed IRQ catches. */
+static void esp_reset_slave(void)
+{
+	if (gpio_request(RESET_PIN, "ESP_RESET_PIN")) {
+		esp_warn("Failed to obtain GPIO for Reset pin (%d); skipping reset\n",
+			RESET_PIN);
+		return;
+	}
+	set_bit(ESP_SPI_GPIO_RESET_REQUESTED, &spi_context.spi_flags);
+
+	gpio_direction_output(RESET_PIN, 0);    /* assert reset (EN low) */
+	msleep(ESP_RESET_LOW_MS);
+	gpio_set_value(RESET_PIN, 1);           /* release (EN high) */
+	msleep(ESP_RESET_BOOT_MS);
+	esp_info("C5 reset pulsed via GPIO %d\n", RESET_PIN);
+}
+
 static int spi_dev_init(int spi_clk_mhz)
 {
 	int status = 0;
 	struct spi_board_info esp_board = {{0}};
 	struct spi_master *master = NULL;
+
+	esp_reset_slave();
 
 	strscpy(esp_board.modalias, "esp_spi", sizeof(esp_board.modalias));
 	esp_board.mode = g_spi_mode;
@@ -620,6 +641,11 @@ static void cleanup_spi_gpio(void)
 	if (test_bit(ESP_SPI_GPIO_HS_REQUESTED, &spi_context.spi_flags)) {
 		gpio_free(HANDSHAKE_PIN);
 		clear_bit(ESP_SPI_GPIO_HS_REQUESTED, &spi_context.spi_flags);
+	}
+
+	if (test_bit(ESP_SPI_GPIO_RESET_REQUESTED, &spi_context.spi_flags)) {
+		gpio_free(RESET_PIN);
+		clear_bit(ESP_SPI_GPIO_RESET_REQUESTED, &spi_context.spi_flags);
 	}
 }
 

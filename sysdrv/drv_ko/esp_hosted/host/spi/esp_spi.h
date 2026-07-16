@@ -16,6 +16,14 @@
 #define SPI_IRQ                 gpio_to_irq(HANDSHAKE_PIN)
 #define SPI_DATA_READY_PIN      73
 #define SPI_DATA_READY_IRQ      gpio_to_irq(SPI_DATA_READY_PIN)
+/* RESET_PIN drives the C5 EN (chip-enable, active-high). GPIO1_D2 pin9 (glob 58),
+ * next to HANDSHAKE(pin10)/DATA_READY(pin11). Driver pulses it low->high at load so
+ * the C5 boots AFTER the rising-edge IRQs are armed -> deterministic sync regardless
+ * of load order, no manual reset. Boot-safe: pin is input(hi-Z) until requested, so
+ * the C5 EN pullup keeps the chip enabled before the driver claims the line. */
+#define RESET_PIN               58
+#define ESP_RESET_LOW_MS        100     /* EN held low (assert reset) */
+#define ESP_RESET_BOOT_MS       100     /* settle after release before continuing */
 #define SPI_BUF_SIZE            1600
 
 enum spi_flags_e {
@@ -25,6 +33,7 @@ enum spi_flags_e {
 	ESP_SPI_GPIO_HS_IRQ_DONE,
 	ESP_SPI_GPIO_DR_REQUESTED,
 	ESP_SPI_GPIO_DR_IRQ_DONE,
+	ESP_SPI_GPIO_RESET_REQUESTED,
 	ESP_SPI_DATAPATH_OPEN,
 };
 
