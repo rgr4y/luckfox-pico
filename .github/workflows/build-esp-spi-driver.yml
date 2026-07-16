@@ -31,7 +31,7 @@ jobs:
           df -h /
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -55,7 +55,7 @@ jobs:
           modinfo out/esp32_spi.ko 2>/dev/null | grep -E 'vermagic|parm=' || true
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: esp32_spi-ko-${{ github.sha }}
           path: out/esp32_spi.ko
