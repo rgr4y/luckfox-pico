@@ -10,17 +10,19 @@
 #include "esp.h"
 
 /* RV1106 (Luckfox Pico Pro Max) global GPIO numbers (gpioN base = N*32).
- * Was RPi BCM 22/27. HANDSHAKE=GPIO1_D3 pin10 (glob 59) <- C5 IO9(HANDSHAKE);
- * DATA_READY=GPIO2_B1 pin11 (glob 73) <- C5 IO2(DATA_READY). */
+ * Was RPi BCM 22/27. HANDSHAKE=GPIO1_D3 pin10 (glob 59) <- ESP slave HANDSHAKE
+ * (C5 fw: IO9); DATA_READY=GPIO2_B1 pin11 (glob 73) <- ESP slave DATA_READY
+ * (C5 fw: IO2). Any esp-hosted SPI slave works; C5 pins are the reference wiring. */
 #define HANDSHAKE_PIN           59
 #define SPI_IRQ                 gpio_to_irq(HANDSHAKE_PIN)
 #define SPI_DATA_READY_PIN      73
 #define SPI_DATA_READY_IRQ      gpio_to_irq(SPI_DATA_READY_PIN)
-/* RESET_PIN drives the C5 EN (chip-enable, active-high). GPIO1_D2 pin9 (glob 58),
- * next to HANDSHAKE(pin10)/DATA_READY(pin11). Driver pulses it low->high at load so
- * the C5 boots AFTER the rising-edge IRQs are armed -> deterministic sync regardless
- * of load order, no manual reset. Boot-safe: pin is input(hi-Z) until requested, so
- * the C5 EN pullup keeps the chip enabled before the driver claims the line. */
+/* RESET_PIN = default for the reset_pin module param: host GPIO -> ESP slave EN
+ * (chip-enable, active-high). GPIO1_D2 pin9 (glob 58), next to HANDSHAKE(pin10)/
+ * DATA_READY(pin11). Driver pulses it low->high at load so the slave boots AFTER the
+ * rising-edge IRQs are armed -> deterministic sync regardless of load order, no
+ * manual reset. Boot-safe: pin is input(hi-Z) until requested, so the ESP EN pullup
+ * keeps it enabled before the driver claims the line. Override via reset_pin=. */
 #define RESET_PIN               58
 #define ESP_RESET_LOW_MS        100     /* EN held low (assert reset) */
 #define ESP_RESET_BOOT_MS       100     /* settle after release before continuing */

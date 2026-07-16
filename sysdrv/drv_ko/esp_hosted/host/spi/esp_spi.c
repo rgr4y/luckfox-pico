@@ -23,6 +23,17 @@
 
 extern u32 raw_tp_mode;
 uint8_t g_spi_mode = SPI_MODE_2;
+
+/* Host GPIO wired to the ESP slave EN (chip-enable). Pulsed low->high AFTER the
+ * datapath opens (see esp_reset_slave) for deterministic, race-free sync.
+ * Configurable via /etc/default/esp-hosted (ESP_RESET_PIN) -> esp-reload -> insmod
+ * reset_pin=. Defaults to RESET_PIN (58 = pin9/GPIO1_D2); a negative value disables
+ * the reset (falls back to the already-high edge-kick). Distinct from the stock
+ * generic `resetpin` param (which resets early in esp_init, before the datapath =
+ * racy). */
+static int reset_pin = RESET_PIN;
+module_param(reset_pin, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(reset_pin, "Host GPIO -> ESP slave EN, pulsed after datapath open for deterministic sync (default 58=pin9/GPIO1_D2; <0 disables)");
 static struct sk_buff *read_packet(struct esp_adapter *adapter);
 static int write_packet(struct esp_adapter *adapter, struct sk_buff *skb);
 static void spi_exit(void);
@@ -445,26 +456,31 @@ static struct spi_controller *spi_busnum_to_master(u16 bus_num)
 }
 #endif
 
-/* Pulse the C5 EN (RESET_PIN) low->high so the slave reboots under driver control.
+/* Pulse the ESP slave EN (reset_pin) low->high so it reboots under driver control.
  * MUST be called AFTER open_data_path() and after the rising-edge IRQs are armed:
- * the C5 emits its one-shot bootup event ~immediately after boot, so if the
+ * the slave emits its one-shot bootup event ~immediately after boot, so if the
  * datapath isn't open yet that packet is dropped (!data_path) and never resent ->
  * no chipset detect, no wlan0. Resetting last guarantees the fresh boot edge lands
- * on an armed IRQ with the datapath already open. */
+ * on an armed IRQ with the datapath already open. Pin from the reset_pin module
+ * param (default 58); a negative/invalid value disables the reset. */
 static void esp_reset_slave(void)
 {
-	if (gpio_request(RESET_PIN, "ESP_RESET_PIN")) {
+	if (reset_pin < 0 || !gpio_is_valid(reset_pin)) {
+		esp_info("reset_pin=%d disabled/invalid; relying on edge-kick\n", reset_pin);
+		return;
+	}
+	if (gpio_request(reset_pin, "ESP_RESET_PIN")) {
 		esp_warn("Failed to obtain GPIO for Reset pin (%d); skipping reset\n",
-			RESET_PIN);
+			reset_pin);
 		return;
 	}
 	set_bit(ESP_SPI_GPIO_RESET_REQUESTED, &spi_context.spi_flags);
 
-	gpio_direction_output(RESET_PIN, 0);    /* assert reset (EN low) */
+	gpio_direction_output(reset_pin, 0);    /* assert reset (EN low) */
 	msleep(ESP_RESET_LOW_MS);
-	gpio_set_value(RESET_PIN, 1);           /* release (EN high) */
+	gpio_set_value(reset_pin, 1);           /* release (EN high) */
 	msleep(ESP_RESET_BOOT_MS);
-	esp_info("C5 reset pulsed via GPIO %d\n", RESET_PIN);
+	esp_info("ESP slave reset pulsed via GPIO %d\n", reset_pin);
 }
 
 static int spi_dev_init(int spi_clk_mhz)
@@ -569,14 +585,14 @@ static int spi_dev_init(int spi_clk_mhz)
 
 	open_data_path();
 
-	/* Datapath is now open and both rising-edge IRQs are armed. Reboot the C5 so
-	 * its one-shot bootup event fires into a ready host: the fresh low->high edge
-	 * on HANDSHAKE/DATA_READY lands on the armed IRQ and the bootup packet is
-	 * accepted (data_path==OPEN) -> chipset detect + card add. */
+	/* Datapath is now open and both rising-edge IRQs are armed. Reboot the ESP
+	 * slave so its one-shot bootup event fires into a ready host: the fresh
+	 * low->high edge on HANDSHAKE/DATA_READY lands on the armed IRQ and the bootup
+	 * packet is accepted (data_path==OPEN) -> chipset detect + card add. */
 	esp_reset_slave();
 
-	/* Backup for the no-reset case (RESET_PIN unwired / gpio_request failed): if a
-	 * line is already high the rising edge is gone, so kick the handlers once. */
+	/* Backup for the no-reset case (reset_pin unwired/disabled or gpio_request
+	 * failed): if a line is already high the rising edge is gone, kick once. */
 	if (gpio_get_value(HANDSHAKE_PIN))
 		spi_interrupt_handler(SPI_IRQ, spi_context.esp_spi_dev);
 	if (gpio_get_value(SPI_DATA_READY_PIN))
@@ -649,7 +665,7 @@ static void cleanup_spi_gpio(void)
 	}
 
 	if (test_bit(ESP_SPI_GPIO_RESET_REQUESTED, &spi_context.spi_flags)) {
-		gpio_free(RESET_PIN);
+		gpio_free(reset_pin);
 		clear_bit(ESP_SPI_GPIO_RESET_REQUESTED, &spi_context.spi_flags);
 	}
 }

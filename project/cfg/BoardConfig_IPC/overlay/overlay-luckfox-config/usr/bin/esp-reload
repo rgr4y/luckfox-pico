@@ -16,6 +16,8 @@ fi
 [ -r /etc/default/esp-hosted ] && . /etc/default/esp-hosted
 ESP_ARGS=""
 [ -n "$ESP_LOG_LEVEL" ] && ESP_ARGS="$ESP_ARGS log_level=$ESP_LOG_LEVEL"
+# Host GPIO -> ESP slave EN. Default 58 (pin9) if unset; set ESP_RESET_PIN=-1 to disable.
+ESP_ARGS="$ESP_ARGS reset_pin=${ESP_RESET_PIN:-58}"
 
 D=/lib/modules/$(uname -r)/extra
 rmmod esp32_spi 2>/dev/null
