@@ -446,8 +446,11 @@ static struct spi_controller *spi_busnum_to_master(u16 bus_num)
 #endif
 
 /* Pulse the C5 EN (RESET_PIN) low->high so the slave reboots under driver control.
- * Called before the rising-edge IRQs are armed: the C5's post-boot HANDSHAKE/
- * DATA_READY assertion then lands as a fresh edge the armed IRQ catches. */
+ * MUST be called AFTER open_data_path() and after the rising-edge IRQs are armed:
+ * the C5 emits its one-shot bootup event ~immediately after boot, so if the
+ * datapath isn't open yet that packet is dropped (!data_path) and never resent ->
+ * no chipset detect, no wlan0. Resetting last guarantees the fresh boot edge lands
+ * on an armed IRQ with the datapath already open. */
 static void esp_reset_slave(void)
 {
 	if (gpio_request(RESET_PIN, "ESP_RESET_PIN")) {
@@ -469,8 +472,6 @@ static int spi_dev_init(int spi_clk_mhz)
 	int status = 0;
 	struct spi_board_info esp_board = {{0}};
 	struct spi_master *master = NULL;
-
-	esp_reset_slave();
 
 	strscpy(esp_board.modalias, "esp_spi", sizeof(esp_board.modalias));
 	esp_board.mode = g_spi_mode;
@@ -568,10 +569,14 @@ static int spi_dev_init(int spi_clk_mhz)
 
 	open_data_path();
 
-	/* If the slave asserted HANDSHAKE/DATA_READY before we armed the rising-edge
-	 * IRQ (driver loaded after the ESP booted), the edge is already gone and we'd
-	 * wait forever. Kick the handlers once if the lines are already high so we sync
-	 * regardless of boot order (no manual C5 reset needed). */
+	/* Datapath is now open and both rising-edge IRQs are armed. Reboot the C5 so
+	 * its one-shot bootup event fires into a ready host: the fresh low->high edge
+	 * on HANDSHAKE/DATA_READY lands on the armed IRQ and the bootup packet is
+	 * accepted (data_path==OPEN) -> chipset detect + card add. */
+	esp_reset_slave();
+
+	/* Backup for the no-reset case (RESET_PIN unwired / gpio_request failed): if a
+	 * line is already high the rising edge is gone, so kick the handlers once. */
 	if (gpio_get_value(HANDSHAKE_PIN))
 		spi_interrupt_handler(SPI_IRQ, spi_context.esp_spi_dev);
 	if (gpio_get_value(SPI_DATA_READY_PIN))
