@@ -19,7 +19,14 @@ ESP_ARGS=""
 # Host GPIO -> ESP slave EN. Default 58 (pin9) if unset; set ESP_RESET_PIN=-1 to disable.
 ESP_ARGS="$ESP_ARGS reset_pin=${ESP_RESET_PIN:-58}"
 
-D=/lib/modules/$(uname -r)/extra
+# Module dir: dev/manual staging in /lib/modules/<ver>/extra wins (fresh hand-built
+# ko), else the platform's vendor dir /oem/usr/ko (where cfg80211/bluetooth/esp32_spi
+# + crypto deps ship). Shipped image has empty /lib/modules so it lands on /oem.
+D=""
+for d in /lib/modules/$(uname -r)/extra /oem/usr/ko; do
+	[ -f "$d/esp32_spi.ko" ] && D="$d" && break
+done
+: "${D:=/oem/usr/ko}"
 rmmod esp32_spi 2>/dev/null
 sleep 0.3
 modprobe cfg80211 2>/dev/null || insmod $D/cfg80211.ko 2>/dev/null

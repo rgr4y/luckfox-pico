@@ -5,15 +5,20 @@
 # OPT-IN: no-op unless /etc/default/esp-hosted sets ESP_ENABLE=1 AND the module
 # is installed -> safe on non-ESP boards.
 CONF=/etc/default/esp-hosted
-KO=/lib/modules/$(uname -r)/extra/esp32_spi.ko
 HS=59   # HANDSHAKE gpio (glob): ESP slave firmware drives it high when up
 
 [ -r "$CONF" ] && . "$CONF"
 
+# Dev staging /lib/modules/extra wins; else platform vendor dir /oem/usr/ko.
+KO=""
+for d in /lib/modules/$(uname -r)/extra /oem/usr/ko; do
+  [ -f "$d/esp32_spi.ko" ] && KO="$d/esp32_spi.ko" && break
+done
+
 case "$1" in
   start)
     [ "${ESP_ENABLE:-0}" = "1" ] || { echo "S44esp: disabled (ESP_ENABLE!=1 in $CONF)"; exit 0; }
-    [ -f "$KO" ] || { echo "S44esp: $KO not installed; skipping"; exit 0; }
+    [ -n "$KO" ] || { echo "S44esp: esp32_spi.ko not installed; skipping"; exit 0; }
 
     # Optional presence probe: only bail on a CONFIDENT absence reading. Needs a
     # pull-down on HS to be trustworthy (see $CONF); off by default.
