@@ -1,0 +1,68 @@
+name: build-image
+
+# Full flashable image (kernel + uboot + buildroot rootfs + driver + firmware) with
+# the esp-hosted overlay (S44esp, /etc/default/esp-hosted, syslogd -C, sysctl
+# linkdown) and esp32_spi.ko baked in. Heavy (buildroot ~45-90min) so NOT on every
+# push — dispatch manually or on a v* tag. Fast per-push driver ko = build-esp-spi-driver.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Free disk space (buildroot needs room)
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/share/swift
+          sudo docker image prune -af || true
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Build Docker buildenv
+        run: docker build -f Dockerfile.build -t luckfox-build .
+
+      - name: Select pro-max board (SPI_NAND / Buildroot)
+        run: ln -rfs project/cfg/BoardConfig_IPC/BoardConfig-SPI_NAND-Buildroot-RV1106_Luckfox_Pico_Pro_Max-IPC.mk .BoardConfig.mk
+
+      - name: Build full image
+        run: docker run --rm -v "$PWD":/sdk luckfox-build ./build.sh all
+
+      - name: Stage artifacts
+        run: |
+          set -e
+          mkdir -p out
+          # Flashable images.
+          cp -v output/image/* out/ 2>/dev/null || true
+          # Confirm the overlay + module actually baked into the rootfs.
+          RFS=$(find output -maxdepth 3 -type d -name rootfs 2>/dev/null | head -1)
+          echo "rootfs staged at: ${RFS:-<none>}"
+          if [ -n "$RFS" ]; then
+            echo "--- overlay present? ---"
+            ls -l "$RFS"/etc/init.d/S44esp "$RFS"/etc/default/esp-hosted \
+                  "$RFS"/etc/default/syslogd "$RFS"/etc/sysctl.d/60-esp-linkdown.conf 2>&1 || true
+            echo "--- esp32_spi.ko in image? ---"
+            find "$RFS/lib/modules" -name 'esp32_spi.ko' 2>/dev/null || echo "esp32_spi.ko NOT in rootfs"
+          fi
+          test -n "$(ls -A out 2>/dev/null)" || { echo "::error::no images produced"; exit 1; }
+          ls -lh out
+
+      - name: Upload image
+        uses: actions/upload-artifact@v7
+        with:
+          name: luckfox-promax-image-${{ github.sha }}
+          path: out/
+          if-no-files-found: error
