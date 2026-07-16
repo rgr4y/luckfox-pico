@@ -122,10 +122,14 @@ uint8_t g_spi_mode = SPI_MODE_2;
 #elif defined CONFIG_IDF_TARGET_ESP32C5
 
 #define ESP_SPI_CONTROLLER     1
-#define GPIO_MOSI              7
-#define GPIO_MISO              2
-#define GPIO_SCLK              6
-#define GPIO_CS                10
+/* Remapped to FireBeetle 2 ESP32-C5 (DFR1222) labeled SPI header block.
+ * MOSI=IO24(MOSI pad) MISO=IO25(MISO pad) SCLK=IO23(SCLK pad) CS=IO8(D2).
+ * HANDSHAKE=IO9(SDA) / DATA_READY=IO2(D5) are in sdkconfig.defaults.esp32c5.
+ * NG stock C5 defaults (7/2/6/10 + DR IO4) don't map — IO4 isn't broken out. */
+#define GPIO_MOSI              24
+#define GPIO_MISO              25
+#define GPIO_SCLK              23
+#define GPIO_CS                8
 #define DMA_CHAN               SPI_DMA_CH_AUTO
 
 #define SPI_CLK_MHZ            30
