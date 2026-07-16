@@ -1,0 +1,62 @@
+name: build-esp-spi-driver
+
+# Builds esp32_spi.ko (ESP-Hosted-NG SPI host driver) in the repo's Docker
+# buildenv and uploads it as an artifact — replaces the ephemeral GCP Cloud
+# Shell build loop. Cross-compiler ships in-repo; Dockerfile.build only adds
+# host build deps.
+
+on:
+  push:
+    branches: [main, esp-c5-slave]
+    paths:
+      - 'sysdrv/drv_ko/esp_hosted/host/**'
+      - 'sysdrv/source/kernel/**'
+      - 'Dockerfile.build'
+      - '.github/workflows/build-esp-spi-driver.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-driver-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build Docker buildenv
+        run: docker build -f Dockerfile.build -t luckfox-build .
+
+      - name: Select pro-max board (SPI_NAND / Buildroot)
+        # build.sh reads .BoardConfig.mk; a fresh tree has none and would hit the
+        # interactive lunch prompt. This is exactly what `./build.sh lunch` writes.
+        run: ln -rfs project/cfg/BoardConfig_IPC/BoardConfig-SPI_NAND-Buildroot-RV1106_Luckfox_Pico_Pro_Max-IPC.mk .BoardConfig.mk
+
+      - name: Build driver
+        run: docker run --rm -v "$PWD":/sdk luckfox-build ./build.sh driver
+
+      - name: Stage artifact
+        run: |
+          KO=sysdrv/drv_ko/esp_hosted/host/esp32_spi.ko
+          test -f "$KO" || { echo "::error::$KO not produced"; exit 1; }
+          mkdir -p out
+          cp "$KO" out/
+          modinfo out/esp32_spi.ko 2>/dev/null | grep -E 'vermagic|parm=' || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32_spi-ko-${{ github.sha }}
+          path: out/esp32_spi.ko
+          if-no-files-found: error
