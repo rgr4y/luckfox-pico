@@ -1,6 +1,17 @@
 #!/bin/sh
 # Reload the ESP-Hosted-NG SPI stack (esp32_spi + deps). Re-syncs after a C5
 # reset or when bringing the link up. Loads cfg80211 + bluetooth deps first.
+
+# Needs root (insmod/rmmod). If not root: use passwordless sudo if available,
+# else fail rather than partially run.
+if [ "$(id -u)" -ne 0 ]; then
+	if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+		exec sudo "$0" "$@"
+	fi
+	echo "esp-reload: must be root (no passwordless sudo available)" >&2
+	exit 1
+fi
+
 D=/lib/modules/$(uname -r)/extra
 rmmod esp32_spi 2>/dev/null
 sleep 0.3
