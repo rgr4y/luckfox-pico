@@ -54,6 +54,9 @@ MODULE_PARM_DESC(raw_tp_mode, "Mode chosen to test raw throughput");
 module_param(ota_file, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(ota_file, "Ota file to update ESP firmware");
 
+module_param(log_level, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(log_level, "Log verbosity: 0=ERR 1=WARN 2=INFO(default) 3=DEBUG 4=VERBOSE (also runtime-tunable via debugfs)");
+
 static void deinit_adapter(void);
 
 
