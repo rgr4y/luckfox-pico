@@ -1,0 +1,3 @@
+# -C[N] = in-memory circular buffer (N KB) so busybox logread works.
+# Without -C, syslogd only writes /var/log/messages and logread can't attach.
+SYSLOGD_ARGS="-C64"

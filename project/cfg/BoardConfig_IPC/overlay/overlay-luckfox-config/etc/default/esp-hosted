@@ -1,0 +1,13 @@
+# ESP-Hosted-NG SPI bring-up config. Sourced by /etc/init.d/S44esp and esp-reload.
+# DISABLED by default so images without an ESP slave (or other boards sharing this
+# overlay) no-op. Flip ESP_ENABLE=1 per board that has an ESP-C5 wired.
+ESP_ENABLE=0
+# Host GPIO -> ESP slave EN (reset). Passed to the driver as reset_pin=; the driver
+# pulses it low->high after the datapath opens for deterministic sync. 58 = pin9
+# (GPIO1_D2). Set -1 to disable the reset.
+ESP_RESET_PIN=58
+# Optional pre-load presence probe on HANDSHAKE (gpio59). Trustworthy only with a
+# pull-down on the line (DT bias-pull-down or ext 100k); 0 = off.
+ESP_PROBE_HS=0
+# Driver log verbosity: 0=ERR 1=WARN 2=INFO 3=DEBUG 4=VERBOSE.
+ESP_LOG_LEVEL=2

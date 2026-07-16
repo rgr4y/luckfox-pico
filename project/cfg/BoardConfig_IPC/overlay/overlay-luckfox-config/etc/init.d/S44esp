@@ -1,0 +1,54 @@
+#!/bin/sh
+# Boot-load the ESP-Hosted-NG SPI stack so wlan0 exists before S45wifi.
+# Placed at S44 (AFTER S40network, BEFORE S45wifi): wlan0 absent when ifup -a
+# runs so ifup skips it; S45wifi owns associate+DHCP (no double udhcpc).
+# OPT-IN: no-op unless /etc/default/esp-hosted sets ESP_ENABLE=1 AND the module
+# is installed -> safe on non-ESP boards.
+CONF=/etc/default/esp-hosted
+KO=/lib/modules/$(uname -r)/extra/esp32_spi.ko
+HS=59   # HANDSHAKE gpio (glob): ESP slave firmware drives it high when up
+
+[ -r "$CONF" ] && . "$CONF"
+
+case "$1" in
+  start)
+    [ "${ESP_ENABLE:-0}" = "1" ] || { echo "S44esp: disabled (ESP_ENABLE!=1 in $CONF)"; exit 0; }
+    [ -f "$KO" ] || { echo "S44esp: $KO not installed; skipping"; exit 0; }
+
+    # Optional presence probe: only bail on a CONFIDENT absence reading. Needs a
+    # pull-down on HS to be trustworthy (see $CONF); off by default.
+    if [ "${ESP_PROBE_HS:-0}" = "1" ] && [ -w /sys/class/gpio/export ]; then
+      echo "$HS" > /sys/class/gpio/export 2>/dev/null
+      echo in > /sys/class/gpio/gpio$HS/direction 2>/dev/null
+      v=$(cat /sys/class/gpio/gpio$HS/value 2>/dev/null)
+      echo "$HS" > /sys/class/gpio/unexport 2>/dev/null
+      [ "$v" = "0" ] && { echo "S44esp: HANDSHAKE low, no ESP detected; skipping"; exit 0; }
+    fi
+
+    printf "Loading ESP SPI stack: "
+    /usr/bin/esp-reload >/dev/null 2>&1
+    i=0
+    while [ "$i" -lt 8 ]; do
+      [ -d /sys/class/net/wlan0 ] && break
+      i=$((i + 1)); sleep 1
+    done
+    [ -d /sys/class/net/wlan0 ] && echo "[ OK ]" || echo "[ !! no wlan0 !! ]"
+    ;;
+  stop)
+    rmmod esp32_spi 2>/dev/null
+    ;;
+  restart|reload)
+    # Full manual reload: reload module, then RE-ASSOCIATE. Boot leaves wpa to
+    # S45wifi (runs next), but a manual restart recreates wlan0 with no wpa, so
+    # kick S45wifi here or the link sits unassociated (self-lockout on wlan0).
+    "$0" stop; "$0" start
+    if [ -x /etc/init.d/S45wifi ]; then
+      killall -q wpa_supplicant udhcpc 2>/dev/null
+      /etc/init.d/S45wifi start
+    fi
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"; exit 1
+    ;;
+esac
+exit 0
