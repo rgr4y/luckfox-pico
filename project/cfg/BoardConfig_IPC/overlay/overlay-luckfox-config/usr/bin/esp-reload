@@ -1,0 +1,19 @@
+#!/bin/sh
+# Reload the ESP-Hosted-NG SPI stack (esp32_spi + deps). Re-syncs after a C5
+# reset or when bringing the link up. Loads cfg80211 + bluetooth deps first.
+D=/lib/modules/$(uname -r)/extra
+rmmod esp32_spi 2>/dev/null
+sleep 0.3
+modprobe cfg80211 2>/dev/null || insmod $D/cfg80211.ko 2>/dev/null
+modprobe bluetooth 2>/dev/null || {
+	insmod $D/rfkill.ko 2>/dev/null
+	insmod $D/libaes.ko 2>/dev/null
+	insmod $D/ecc.ko 2>/dev/null
+	insmod $D/ecdh_generic.ko 2>/dev/null
+	insmod $D/bluetooth.ko 2>/dev/null
+}
+dmesg -c >/dev/null 2>&1
+insmod $D/esp32_spi.ko || { echo "insmod esp32_spi failed"; exit 1; }
+sleep 1
+echo "--- dmesg ---"; dmesg | grep -iE "esp32|wlan|ESP chipset|capab|Received|slave|bootup|MAC" | tail -20
+echo "--- net ---"; ls /sys/class/net

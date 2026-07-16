@@ -547,6 +547,15 @@ static int spi_dev_init(int spi_clk_mhz)
 
 	open_data_path();
 
+	/* If the slave asserted HANDSHAKE/DATA_READY before we armed the rising-edge
+	 * IRQ (driver loaded after the ESP booted), the edge is already gone and we'd
+	 * wait forever. Kick the handlers once if the lines are already high so we sync
+	 * regardless of boot order (no manual C5 reset needed). */
+	if (gpio_get_value(HANDSHAKE_PIN))
+		spi_interrupt_handler(SPI_IRQ, spi_context.esp_spi_dev);
+	if (gpio_get_value(SPI_DATA_READY_PIN))
+		spi_data_ready_interrupt_handler(SPI_DATA_READY_IRQ, spi_context.esp_spi_dev);
+
 	return 0;
 }
 
