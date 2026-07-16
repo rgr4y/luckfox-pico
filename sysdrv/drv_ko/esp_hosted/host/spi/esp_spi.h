@@ -9,9 +9,12 @@
 
 #include "esp.h"
 
-#define HANDSHAKE_PIN           22
+/* RV1106 (Luckfox Pico Pro Max) global GPIO numbers (gpioN base = N*32).
+ * Was RPi BCM 22/27. HANDSHAKE=GPIO1_D3 pin10 (glob 59) <- C5 IO9(HANDSHAKE);
+ * DATA_READY=GPIO2_B1 pin11 (glob 73) <- C5 IO2(DATA_READY). */
+#define HANDSHAKE_PIN           59
 #define SPI_IRQ                 gpio_to_irq(HANDSHAKE_PIN)
-#define SPI_DATA_READY_PIN      27
+#define SPI_DATA_READY_PIN      73
 #define SPI_DATA_READY_IRQ      gpio_to_irq(SPI_DATA_READY_PIN)
 #define SPI_BUF_SIZE            1600
 
