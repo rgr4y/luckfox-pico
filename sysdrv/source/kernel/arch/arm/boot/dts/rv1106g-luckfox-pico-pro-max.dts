@@ -130,7 +130,12 @@
 
 &usbdrd_dwc3 {
 	status = "okay";
-	dr_mode = "peripheral";
+	/* HOST by default: brings up the dwc3 xhci so USB peripherals enumerate on
+	 * the Pico Pro Max port. Disables the gadget path (no usb0 RNDIS). Role is
+	 * NOT runtime-switchable under single-role dr_mode — dwc3 provisions one
+	 * stack at probe, so PHY otg_mode / dwc3 debugfs `mode` are no-ops.
+	 * Gadget builds (e.g. picokvm) set dr_mode="peripheral" instead. */
+	dr_mode = "host";
 };
 
 /**********SPI**********/
