@@ -35,7 +35,7 @@ export RK_UBOOT_DEFCONFIG_FRAGMENT=rk-sfc.config
 #       <partdef> := <size>[@<offset>](part-name)
 # Note:
 #   If the first partition offset is not 0x0, it must be added. Otherwise, it needn't adding.
-export RK_PARTITION_CMD_IN_ENV="256K(env),256K@256K(idblock),512K(uboot),4M(boot),30M(oem),6M(userdata),85M(rootfs)"
+export RK_PARTITION_CMD_IN_ENV="256K(env),256K@256K(idblock),512K(uboot),4M(boot),30M(oem),6M(userdata),87M(rootfs)"
 
 # config partition's filesystem type (squashfs is readonly)
 # emmc:    squashfs/ext4
@@ -101,7 +101,7 @@ export RK_CAMERA_SENSOR_CAC_BIN="CAC_sc4336_OT01_40IRC_F16"
 export RK_BUILD_APP_TO_OEM_PARTITION=y
 
 # enable rockchip test
-export RK_ENABLE_ROCKCHIP_TEST=y
+export RK_ENABLE_ROCKCHIP_TEST=n
 
 # enable rockchip wifi
 export RK_ENABLE_WIFI=y
@@ -121,5 +121,5 @@ export RK_PRE_BUILD_OEM_SCRIPT=luckfox-buildroot-oem-pre.sh
 export RK_PRE_BUILD_USERDATA_SCRIPT=luckfox-userdata-pre.sh
 
 # declare overlay directory
-export RK_POST_OVERLAY="overlay-luckfox-config overlay-luckfox-buildroot-init overlay-luckfox-buildroot-shadow overlay-luckfox-buildroot-webbee overlay-luckfox-wifibt-firmware"
+export RK_POST_OVERLAY="overlay-luckfox-config overlay-luckfox-buildroot-init overlay-luckfox-buildroot-shadow overlay-luckfox-wifibt-firmware"
 

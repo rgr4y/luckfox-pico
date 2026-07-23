@@ -11,7 +11,8 @@ export RK_CHIP=rv1106
 export RK_APP_TYPE=RKIPC_RV1106
 
 # Config CMA size in environment
-export RK_BOOTARGS_CMA_SIZE="66M"
+# Change this to 66M if you have a camera!
+export RK_BOOTARGS_CMA_SIZE="1M"
 
 # Kernel dts
 export RK_KERNEL_DTS=rv1106g-luckfox-pico-pro-max.dts
@@ -35,7 +36,7 @@ export RK_UBOOT_DEFCONFIG_FRAGMENT=rk-sfc.config
 #       <partdef> := <size>[@<offset>](part-name)
 # Note:
 #   If the first partition offset is not 0x0, it must be added. Otherwise, it needn't adding.
-export RK_PARTITION_CMD_IN_ENV="256K(env),256K@256K(idblock),512K(uboot),4M(boot),30M(oem),10M(userdata),210M(rootfs)"
+export RK_PARTITION_CMD_IN_ENV="256K(env),256K@256K(idblock),512K(uboot),4M(boot),40M(userdata),210M(rootfs)"
 
 # config partition's filesystem type (squashfs is readonly)
 # emmc:    squashfs/ext4
@@ -46,7 +47,7 @@ export RK_PARTITION_CMD_IN_ENV="256K(env),256K@256K(idblock),512K(uboot),4M(boot
 #         AAAA ----------> partition name
 #         /BBBB/CCCC ----> partition mount point
 #         ext4 ----------> partition filesystem type
-export RK_PARTITION_FS_TYPE_CFG=rootfs@IGNORE@ubifs,oem@/oem@ubifs,userdata@/userdata@ubifs
+export RK_PARTITION_FS_TYPE_CFG=rootfs@IGNORE@ubifs,userdata@/userdata@ubifs
 
 # config filesystem compress (Just for squashfs or ubifs)
 # squashfs: lz4/lzo/lzma/xz/gzip, default xz
