@@ -1,0 +1,68 @@
+#!/bin/sh
+# PicoKVM: RTL8821CU USB combo dongle (AC600 WiFi + Bluetooth 4.2)
+# Loads kernel drivers early so S45wifi can associate and S40bluetoothd
+# can start. WiFi association is handled by S45wifi (reads
+# /mnt/sdcard/wpa_supplicant.conf); the BT daemon by S40bluetoothd.
+
+KREL="$(uname -r)"
+
+# Load a module by name. Try modprobe first (resolves deps via depmod), then
+# fall back to an explicit insmod from the locations the SDK may drop modules:
+#   - /lib/modules/<rel>/extra   : manually-installed / out-of-tree
+#   - /oem/usr/ko                : SDK drv_ko wifi output (RK framework)
+#   - /lib/modules/<rel>/kernel  : in-tree modules built from the defconfig
+load() {
+    lsmod | grep -qw "$1" && return 0
+    modprobe "$1" 2>/dev/null && return 0
+    for d in "/lib/modules/$KREL/extra" /oem/usr/ko "/lib/modules/$KREL/kernel"; do
+        if [ -f "$d/$1.ko" ]; then
+            insmod "$d/$1.ko" 2>/dev/null && return 0
+        fi
+    done
+    return 1
+}
+
+start() {
+    # ---- WiFi: cfg80211 + rtl8821cu (device 0bda:c820) ----
+    load cfg80211
+    load 8821cu
+
+    # ---- Bluetooth stack + crypto deps (in dependency order) ----
+    for m in rfkill libaes aes_generic ecb cmac ecc ecdh_generic \
+             bluetooth btintel btrtl; do
+        load "$m"
+    done
+
+    # ---- btusb: the RTL8821CU BT firmware download times out (-110) on the
+    #      first attempt fairly often. Reload btusb until the controller
+    #      firmware is confirmed live ("RTL: fw version" in dmesg).
+    #      Run in the background so a slow/flaky download does not stall the
+    #      rest of boot (networking, etc.); S40bluetoothd waits for hci0. ----
+    (
+        n=0
+        while [ "$n" -lt 5 ]; do
+            n=$((n + 1))
+            fail0=$(dmesg | grep -c "download fw command failed")
+            load btusb
+            i=0
+            ok=0
+            while [ "$i" -lt 12 ]; do
+                i=$((i + 1))
+                if dmesg | grep -q "hci0: RTL: fw version"; then ok=1; break; fi
+                if [ "$(dmesg | grep -c 'download fw command failed')" -gt "$fail0" ]; then
+                    break
+                fi
+                sleep 1
+            done
+            [ "$ok" -eq 1 ] && break
+            rmmod btusb 2>/dev/null
+            sleep 1
+        done
+    ) &
+}
+
+case "$1" in
+    start) start ;;
+    stop)  rmmod btusb 2>/dev/null ;;
+    *)     echo "Usage: $0 {start|stop}"; exit 1 ;;
+esac

@@ -1,3 +1,28 @@
 #!/bin/sh
-# Disabled — no Bluetooth hardware on PicoKVM board
-exit 0
+# PicoKVM: BlueZ bluetoothd (Entware /opt). Requires dbus (S20dbus) and the
+# BT kernel modules loaded by S30rtldrv. AutoEnable=true in
+# /opt/etc/bluetooth/main.conf powers the controller on automatically.
+
+BLUETOOTHD=/opt/bin/bluetoothd
+
+case "$1" in
+    start)
+        [ -x "$BLUETOOTHD" ] || exit 0
+        pidof bluetoothd >/dev/null 2>&1 && exit 0
+        # Wait for hci0 (S30rtldrv loads btusb + downloads firmware)
+        i=0
+        while [ "$i" -lt 15 ]; do
+            [ -e /sys/class/bluetooth/hci0 ] && break
+            i=$((i + 1))
+            sleep 1
+        done
+        setsid "$BLUETOOTHD" >/var/log/bluetoothd.log 2>&1 </dev/null &
+        ;;
+    stop)
+        killall bluetoothd 2>/dev/null
+        ;;
+    *)
+        echo "Usage: $0 {start|stop}"
+        exit 1
+        ;;
+esac

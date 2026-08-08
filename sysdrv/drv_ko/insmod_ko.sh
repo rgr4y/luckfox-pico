@@ -40,6 +40,11 @@ __chk_camera_sensor_height()
 
 __insmod rk_dvbm.ko
 
+# PicoKVM: tc358743 HDMI-to-CSI bridge. Stock SDK ships .ko but never loads it.
+# Without this, /dev/video* never gets an HDMI source and kvm_video reports
+# "HDMI signal not detected". Also required for /sys/module/tc35874x/parameters/*.
+__insmod tc35874x.ko
+
 __insmod videobuf2-memops.ko
 __insmod videobuf2-common.ko
 __insmod videobuf2-v4l2.ko
