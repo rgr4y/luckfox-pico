@@ -1,0 +1,58 @@
+#!/bin/sh
+
+SRC_BIN_DIR="/usr/bin"
+DST_BIN_DIR="/userdata/picokvm/bin"
+
+SRC_MODEL_DIR="/usr/model"
+DST_MODEL_DIR="/userdata/picokvm/model"
+
+case "$1" in
+start)
+        mkdir -p "$DST_BIN_DIR"
+        mkdir -p "$DST_MODEL_DIR"
+
+        for src in "$SRC_BIN_DIR"/kvm_*; do
+                [ -e "$src" ] || continue
+
+                filename="$(basename "$src")"
+                dst="$DST_BIN_DIR/$filename"
+
+                if [ ! -f "$dst" ]; then
+                        echo "[ADD] $filename"
+                        cp -f "$src" "$dst"
+                        continue
+                fi
+
+                if ! cmp -s "$src" "$dst"; then
+                        echo "[UPDATE] $filename"
+                        cp -f "$src" "$dst"
+                else
+                        echo "[SKIP] $filename (no change)"
+                fi
+        done
+
+        for src in "$SRC_MODEL_DIR"/*; do
+                [ -e "$src" ] || continue
+                [ -f "$src" ] || continue
+
+                filename="$(basename "$src")"
+                dst="$DST_MODEL_DIR/$filename"
+
+                if [ ! -f "$dst" ]; then
+                        echo "[ADD] model/$filename"
+                        cp -f "$src" "$dst"
+                        continue
+                fi
+
+                if ! cmp -s "$src" "$dst"; then
+                        echo "[UPDATE] model/$filename"
+                        cp -f "$src" "$dst"
+                else
+                        echo "[SKIP] model/$filename (no change)"
+                fi
+        done
+        ;;
+*)
+        exit 1
+        ;;
+esac

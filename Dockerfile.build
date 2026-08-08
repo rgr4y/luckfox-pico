@@ -1,0 +1,17 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y -qq \
+    git ssh make build-essential bc \
+    libssl-dev lz4 expect g++ patchelf chrpath \
+    gawk texinfo diffstat binfmt-support \
+    bison flex fakeroot cmake gcc-multilib g++-multilib \
+    unzip device-tree-compiler ncurses-dev libncurses-dev \
+    libncurses5-dev libncursesw5-dev \
+    python-is-python3 python3 \
+    u-boot-tools mtd-utils \
+    file rsync cpio pkg-config gperf \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /sdk

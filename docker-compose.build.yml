@@ -1,0 +1,19 @@
+services:
+  luckfox-build:
+    build:
+      context: .
+      dockerfile: Dockerfile.build
+    volumes:
+      - /mnt/user/appdata/kvm/luckfox-pico:/sdk
+    working_dir: /sdk
+    command: >
+      bash -c "
+        echo '=== Selecting KVM board config ===' &&
+        ln -rfs /sdk/project/cfg/BoardConfig_IPC/BoardConfig-EMMC-Buildroot-RV1106_Luckfox_Pico_KVM-IPC.mk /sdk/.BoardConfig.mk &&
+        ls -la /sdk/.BoardConfig.mk &&
+        echo '=== Building all ===' &&
+        ./build.sh allsave 2>&1 | tee /sdk/build.log ;
+        echo \"=== Exit code: \$$? ===\" ;
+        ls -lh /sdk/output/image/ 2>/dev/null
+      "
+    tty: true
