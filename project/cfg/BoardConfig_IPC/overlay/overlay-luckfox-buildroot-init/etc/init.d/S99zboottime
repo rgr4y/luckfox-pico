@@ -1,0 +1,13 @@
+#!/bin/sh
+# Print total boot time right before the "Welcome to luckfox pico" login banner.
+# Sorts after every other S?? script, so it runs last in rcS. Reads
+# /proc/uptime = seconds since KERNEL entry -> end of init: this is the
+# kernel+userspace time you can tune. It does NOT include U-Boot/SPL/bootdelay
+# (the CONFIG_BOOTDELAY=2 window lives before the kernel starts the clock).
+case "$1" in
+	start)
+		read -r up _ < /proc/uptime
+		printf '\n=== boot: %s s (kernel+init, excl. u-boot) ===\n' "$up"
+		;;
+	stop) ;;
+esac

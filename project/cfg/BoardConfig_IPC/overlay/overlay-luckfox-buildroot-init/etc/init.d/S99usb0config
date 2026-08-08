@@ -53,9 +53,12 @@ usb_reset() {
 
 case $1 in
 start)
-	# check peripheral
-	usb_mode="$(cat $USB_MODE_PATH)"
-	if [ "$usb_mode" = "peripheral" ]; then
+	# Configure only when peripheral mode AND a usb0 gadget is actually present.
+	# If nothing provides usb0 (S50usbdevice stubbed / kvm_app off), stay silent
+	# — no "set usb0 ip" retry spam, no background usb_reset watcher spinning on
+	# nothing. Auto-enables if a gadget ever appears (e.g. S50usbdevice restored).
+	usb_mode="$(cat $USB_MODE_PATH 2>/dev/null)"
+	if [ "$usb_mode" = "peripheral" ] && [ -e /sys/class/net/usb0 ]; then
 		usb0_config
 		usb_reset &
 	fi

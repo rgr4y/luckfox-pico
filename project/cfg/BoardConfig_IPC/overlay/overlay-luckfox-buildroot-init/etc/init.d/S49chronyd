@@ -1,0 +1,13 @@
+#!/bin/sh
+# chronyd (NTP client, Entware /opt) via rc.func — backgrounded (non-blocking)
+# like S48tailscaled. Replaces the old start-stop-daemon version and S49ntp.
+# chronyd self-daemonizes; rc.func's "&" + pidof wait keeps boot from stalling.
+
+ENABLED=yes
+PROCS=chronyd
+ARGS="-f /opt/etc/chrony.conf"
+PREARGS=
+DESC=chronyd
+PATH=/opt/sbin:/opt/bin:/opt/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+. /opt/etc/init.d/rc.func

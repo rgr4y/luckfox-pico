@@ -69,6 +69,46 @@
 	status = "okay";
 };
 
+/**********SDIO (ESP-Hosted WiFi) — see docs/esp-hosted-sdio-plan.md**********/
+/* Dedicated sdio controller @ff9a0000 (separate from the SD-card sdmmc above).
+ * m0 mux = GPIO2_A0-A5 → header pins 21/22/24/25/26/27, verified UNCLAIMED.
+ * 4-bit @ 50MHz, 3.3V. Needs ESP-Hosted-NG slave fw + esp32_sdio module. */
+&sdio {
+	bus-width = <4>;
+	cap-sd-highspeed;
+	cap-sdio-irq;
+	keep-power-in-suspend;
+	/* Card-detect instead of non-removable: an empty slot is then SILENT at
+	 * boot (mmc_rescan sees get_cd()==0, powers the host off, no probe/no
+	 * "error -110 whilst initialising SDIO card"). Wire the ESP32's ready/
+	 * present line to GPIO2_A6 (header, next to the SDIO cluster); it pulls
+	 * the pin LOW when the ESP is up = card present. Internal pull-up (below)
+	 * holds it HIGH = no card when the ESP is off/absent, so a board with no
+	 * ESP soldered boots clean. */
+	cd-gpios = <&gpio2 RK_PA6 GPIO_ACTIVE_LOW>;
+	no-1-8-v;
+	max-frequency = <50000000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&sdmmc1m0_clk &sdmmc1m0_cmd &sdmmc1m0_bus4 &sdio_cd_pin>;
+	status = "okay";
+};
+
+&pinctrl {
+	sdio {
+		sdio_cd_pin: sdio-cd-pin {
+			rockchip,pins = <2 RK_PA6 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+};
+
+/**********WATCHDOG**********/
+/* dw-wdt (snps,dw-wdt @ff5a0000): on expiry the CRU issues a global soft reset
+ * (== the RESET button). Fed at boot by /sbin/watchdog (busybox). Disabled in
+ * the stock DT; enable so a hung kernel/userspace self-resets. */
+&wdt {
+	status = "okay";
+};
+
 /**********ETH**********/
 &gmac {
 	status = "okay";

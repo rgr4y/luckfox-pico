@@ -2,7 +2,7 @@
 
 rcK()
 {
-	for i in $(ls /oem/usr/etc/init.d/S??*) ;do
+	for i in $(ls /oem/usr/etc/init.d/S??* 2>/dev/null) ;do
 
 		# Ignore dangling symlinks (if any).
 		[ ! -f "$i" ] && continue
@@ -25,8 +25,8 @@ rcK()
 }
 
 echo "Stop Application ..."
-killall kvm_app
-killall udhcpc
+killall kvm_app 2>/dev/null
+killall udhcpc 2>/dev/null
 
 while [ 1 ];
 do

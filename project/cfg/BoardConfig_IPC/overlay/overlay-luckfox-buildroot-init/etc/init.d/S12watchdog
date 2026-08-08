@@ -1,0 +1,27 @@
+#!/bin/sh
+# Feed the hardware watchdog (dw-wdt @ff5a0000, enabled via &wdt in the pro-max
+# DTS). If the feeder stalls -- hung kernel, wedged userspace, dead process --
+# the CRU issues a global soft reset == pressing the RESET button. busybox
+# watchdog backgrounds itself and writes the magic-close 'V' on SIGTERM to
+# disarm cleanly (CONFIG_WATCHDOG_NOWAYOUT is off), so reboot/shutdown are safe.
+# Started early (S12, after udev) so it covers the rest of boot too.
+# Timeout 20s / feed 5s: no single boot step blocks anywhere near that, and the
+# feed comfortably beats the dw-wdt hardware max even if the kernel clamps -T.
+WDOG=/dev/watchdog
+TIMEOUT=20
+FEED=5
+
+case "$1" in
+	start)
+		[ -c "$WDOG" ] || { echo "watchdog: $WDOG absent (dw-wdt disabled in DT?)"; exit 0; }
+		printf "Starting watchdog: "
+		/sbin/watchdog -T "$TIMEOUT" -t "$FEED" "$WDOG" && echo "OK" || echo "FAIL"
+		;;
+	stop)
+		killall watchdog 2>/dev/null
+		;;
+	*)
+		echo "Usage: $0 {start|stop}"
+		exit 1
+		;;
+esac
