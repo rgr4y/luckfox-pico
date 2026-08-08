@@ -1,0 +1,5 @@
+#!/bin/sh
+# Disabled — kvm_app manages its own USB gadget via configfs.
+# Stock buildroot's usbdevice script creates a conflicting 'rockchip' gadget
+# that steals hidg0 numbering from kvm_app's 'kvm' gadget.
+exit 0

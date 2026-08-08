@@ -1,0 +1,16 @@
+#!/bin/sh
+
+start(){
+	if [ -f "/bin/tee-supplicant" ]; then
+		tee-supplicant > /tmp/tee-supplicant.log 2>&1 &
+	fi
+}
+
+case $1 in
+start)
+	start &
+	;;
+*)
+	exit 1
+	;;
+esac
