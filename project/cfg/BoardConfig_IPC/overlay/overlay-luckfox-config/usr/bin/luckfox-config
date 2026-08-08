@@ -258,8 +258,9 @@ function luckfox_config_init() {
 		exit
 	fi
 
-	# get chip model
-	LUCKFOX_CHIP_MODEL="$(cat /proc/device-tree/model)" >/dev/null 2>&1
+	# get chip model (strip the trailing NUL that device-tree strings carry,
+	# else bash warns "command substitution: ignored null byte in input")
+	LUCKFOX_CHIP_MODEL="$(tr -d '\0' < /proc/device-tree/model)"
 
 	# cteate cfg file
 	if [ ! -f $LUCKFOX_CFG_FILE ]; then
@@ -368,7 +369,7 @@ function luckfox_load_cfg() {
 			luckfox_set_pin_mark "GPIO2_A2" 1
 			luckfox_set_pin_mark "GPIO2_A3" 1
 		else
-			echo "Only Luckfox Pico Ultra /Luckfox Pico Ultra W support RGB"
+			: # non-RGB model (Pico Pro/Max etc.) — nothing to do, stay quiet
 		fi
 	fi
 

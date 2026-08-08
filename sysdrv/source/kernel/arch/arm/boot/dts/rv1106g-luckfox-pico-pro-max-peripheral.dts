@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Luckfox Pico Pro Max — PERIPHERAL (USB gadget) variant.
+ *
+ * Identical to rv1106g-luckfox-pico-pro-max.dts except the USB OTG runs as a
+ * device (gadget: usb0 RNDIS @ 172.32.0.93, adb, etc.) instead of host.
+ *
+ * Pick at build/flash time — the role is NOT runtime-switchable (dwc3 only
+ * provisions one stack at probe under a single-role dr_mode, so the PHY
+ * otg_mode / dwc3 debugfs `mode` levers are no-ops).
+ *
+ *   host build  -> rv1106g-luckfox-pico-pro-max.dts        (USB WiFi dongle / host peripherals)
+ *   gadget build-> this file                               (usb0 network to a PC)
+ */
+
+#include "rv1106g-luckfox-pico-pro-max.dts"
+
+&usbdrd_dwc3 {
+	dr_mode = "peripheral";
+};

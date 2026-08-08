@@ -15,6 +15,7 @@ UAC1_EN=off
 UAC2_EN=off
 UVC_EN=off
 RNDIS_EN=on
+NCM_EN=off
 HID_EN=off
 
 USB_ATTRIBUTE=0x409
@@ -60,6 +61,7 @@ function_init()
 	mkdir ${USB_FUNCTIONS_DIR}/mtp.gs0
 	mkdir ${USB_FUNCTIONS_DIR}/rndis.gs0
 	#write /config/usb_gadget/g1/functions/rndis.gs0/wceis 1
+	mkdir ${USB_FUNCTIONS_DIR}/ncm.gs0
 	mkdir ${USB_FUNCTIONS_DIR}/acm.gs6
 	mkdir ${USB_FUNCTIONS_DIR}/mass_storage.0
 	mkdir ${USB_FUNCTIONS_DIR}/uvc.gs6
@@ -179,6 +181,10 @@ parameter_init()
 			usb_rndis_en)
 				RNDIS_EN=on
 				make_config_string rndis
+				;;
+			usb_ncm_en)
+				NCM_EN=on
+				make_config_string ncm
 				;;
 			usb_hid_en)
 				HID_EN=on
@@ -336,6 +342,7 @@ bind_functions()
 	fi
 
 	test $RNDIS_EN = on && syslink_function rndis.gs0
+	test $NCM_EN = on && syslink_function ncm.gs0
 	test $MTP_EN = on && syslink_function mtp.gs0
 	test $NTB_EN = on && syslink_function ffs.ntb
 	test $ADB_EN = on && syslink_function ffs.adb

@@ -8,6 +8,7 @@
 #include "isp.h"
 #include "log.h"
 #include "network.h"
+#include "osd.h"
 #include "param.h"
 #include "rockiva.h"
 #include "server.h"
@@ -27,12 +28,22 @@ int enable_minilog = 0;
 int rkipc_log_level = LOG_INFO;
 
 static int g_main_run_ = 1;
+static volatile sig_atomic_t g_reload_ = 0;
 char *rkipc_ini_path_ = NULL;
 char *rkipc_iq_file_path_ = NULL;
 
 static void sig_proc(int signo) {
 	LOG_INFO("received signo %d \n", signo);
 	g_main_run_ = 0;
+}
+
+/* SIGHUP: re-read rkipc.ini from disk and re-apply live-settable config.
+ * Only sets a flag here (async-signal-safe); the actual reload runs in the
+ * main loop below. Covers OSD + ISP image adjustments; pipeline-level keys
+ * (resolution, rotation, enable_wrap) still require a restart to take effect. */
+static void sig_reload(int signo) {
+	(void)signo;
+	g_reload_ = 1;
 }
 
 static const char short_options[] = "c:a:l:";
@@ -148,6 +159,7 @@ int main(int argc, char **argv) {
 	rkipc_version_dump();
 	signal(SIGINT, sig_proc);
 	signal(SIGTERM, sig_proc);
+	signal(SIGHUP, sig_reload);
 
 	rkipc_get_opt(argc, argv);
 	LOG_INFO("rkipc_ini_path_ is %s, rkipc_iq_file_path_ is %s, rkipc_log_level "
@@ -174,6 +186,14 @@ int main(int argc, char **argv) {
 	pthread_create(&key_chk, NULL, wait_key_event, NULL);
 
 	while (g_main_run_) {
+		if (g_reload_) {
+			g_reload_ = 0;
+			LOG_INFO("SIGHUP: reloading %s (param + OSD + ISP adjustments)\n", rkipc_ini_path_);
+			rk_param_reload();
+			if (rk_param_get_int("video.source:enable_aiq", 1))
+				rk_isp_set_from_ini(0);
+			rk_osd_restart();
+		}
 		usleep(1000 * 1000);
 	}
 

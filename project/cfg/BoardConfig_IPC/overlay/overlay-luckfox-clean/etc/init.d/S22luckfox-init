@@ -1,0 +1,105 @@
+#!/bin/sh
+# Luckfox Clean — post-boot init
+# Runs after SD/Entware mount, before network and app launch.
+# Sets up persistent home, shell, SSH keys, locale.
+
+case "$1" in
+  start) ;;
+  stop) exit 0 ;;
+  *) exit 1 ;;
+esac
+
+# --- sshd privilege separation user ---
+grep -q "^sshd:" /etc/passwd || echo "sshd:x:74:74:sshd privsep:/var/empty/sshd:/sbin/nologin" >> /etc/passwd
+grep -q "^sshd:" /etc/group  || echo "sshd:x:74:" >> /etc/group
+mkdir -p /var/empty/sshd
+
+# --- Persistent /root on SD ---
+if mountpoint -q /mnt/sdcard; then
+  mkdir -p /mnt/sdcard/root && chmod 700 /mnt/sdcard/root
+  if [ ! -L /root ] || [ "$(readlink /root)" != "/mnt/sdcard/root" ]; then
+    # Move existing dotfiles to SD if first run
+    [ -d /root ] && [ ! -L /root ] && {
+      cp -a /root/. /mnt/sdcard/root/ 2>/dev/null
+      rm -rf /root
+    }
+    ln -sfn /mnt/sdcard/root /root
+  fi
+fi
+
+# --- Shell: prefer /opt/bin/zsh → /bin/zsh → /bin/sh ---
+if [ -x /opt/bin/zsh ]; then
+  SHELL_PATH=/opt/bin/zsh
+  [ -L /bin/zsh ] || ln -sf /opt/bin/zsh /bin/zsh
+elif [ -x /bin/zsh ]; then
+  SHELL_PATH=/bin/zsh
+else
+  SHELL_PATH=/bin/sh
+fi
+# Entware bash override
+if [ -x /opt/bin/bash ]; then
+  [ -f /bin/bash ] && [ ! -L /bin/bash ] && cp /bin/bash /bin/bash.busybox
+  ln -sf /opt/bin/bash /bin/bash
+fi
+# Update root's shell + home in passwd
+CURRENT=$(grep "^root:" /etc/passwd)
+WANT="root:x:0:0:root:/root:${SHELL_PATH}"
+[ "$CURRENT" != "$WANT" ] && sed -i "s|^root:.*|${WANT}|" /etc/passwd
+
+# --- /etc/shells ---
+for sh in /bin/sh /bin/bash /bin/zsh /opt/bin/zsh /opt/bin/bash; do
+  [ -x "$sh" ] && grep -qx "$sh" /etc/shells 2>/dev/null || echo "$sh" >> /etc/shells
+done
+
+# --- SSH authorized_keys from SD ---
+if [ -f /mnt/sdcard/root/.ssh/authorized_keys ]; then
+  mkdir -p /root/.ssh && chmod 700 /root/.ssh
+  cp /mnt/sdcard/root/.ssh/authorized_keys /root/.ssh/authorized_keys 2>/dev/null
+  chmod 600 /root/.ssh/authorized_keys
+fi
+
+# --- SSH host key persistence ---
+KEY_DIR=/mnt/sdcard/luckfox/ssh_host_keys
+mkdir -p "$KEY_DIR"
+for ktype in rsa ecdsa ed25519; do
+  kfile="/etc/ssh/ssh_host_${ktype}_key"
+  stored="${KEY_DIR}/ssh_host_${ktype}_key"
+  if [ -f "$stored" ]; then
+    cp "$stored" "$kfile"
+    cp "${stored}.pub" "${kfile}.pub" 2>/dev/null
+    chmod 600 "$kfile"
+  elif [ -f "$kfile" ]; then
+    cp "$kfile" "$stored"
+    cp "${kfile}.pub" "${stored}.pub" 2>/dev/null
+  fi
+done
+
+# --- Tailscale state persistence ---
+TS_PERSIST=/mnt/sdcard/luckfox/tailscale
+if mountpoint -q /mnt/sdcard; then
+  mkdir -p "$TS_PERSIST"
+  TS_STATE=/opt/var/lib/tailscale
+  if [ -d "$TS_STATE" ] && [ ! -L "$TS_STATE" ]; then
+    cp -a "$TS_STATE/." "$TS_PERSIST/" 2>/dev/null
+    rm -rf "$TS_STATE"
+  fi
+  mkdir -p "$(dirname "$TS_STATE")"
+  [ -L "$TS_STATE" ] || ln -sfn "$TS_PERSIST" "$TS_STATE"
+fi
+
+# --- Locale (Entware) ---
+if [ -x /opt/bin/localedef ] || [ -x /opt/bin/localedef.new ]; then
+  [ -f /opt/bin/localedef.new ] && ln -sf /opt/bin/localedef.new /opt/bin/localedef
+  [ -f /opt/bin/locale.new ] && ln -sf /opt/bin/locale.new /opt/bin/locale
+  mkdir -p /opt/lib/locale
+  [ -d /opt/lib/locale/en_US.UTF-8 ] || \
+    LOCPATH=/opt/lib/locale I18NPATH=/opt/usr/share/i18n /opt/bin/localedef -i en_US -f UTF-8 /opt/lib/locale/en_US.UTF-8 2>/dev/null
+fi
+
+# --- Disable telnet (only if SSH is running) ---
+if pidof sshd >/dev/null 2>&1; then
+  pidof telnetd >/dev/null 2>&1 && killall telnetd 2>/dev/null
+fi
+
+# --- Run user customizations ---
+[ -x /mnt/sdcard/go.sh ] && /mnt/sdcard/go.sh

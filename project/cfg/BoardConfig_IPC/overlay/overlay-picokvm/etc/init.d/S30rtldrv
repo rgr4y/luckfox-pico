@@ -22,7 +22,23 @@ load() {
     return 1
 }
 
+# True if a Realtek (VID 0bda) USB device is attached. The RTL8821CU dongle
+# enumerates under 0bda regardless of mode (c820 driver-bound, or 1a2b CD-ROM
+# pre-modeswitch); root hubs are 1d6b, so this only matches the real dongle.
+rtl_present() {
+    for v in /sys/bus/usb/devices/*/idVendor; do
+        [ -f "$v" ] || continue
+        [ "$(cat "$v" 2>/dev/null)" = "0bda" ] && return 0
+    done
+    return 1
+}
+
 start() {
+    # ===== DISABLED (Rob 2026-07-14): RTL8821CU wifi + Bluetooth loading off.
+    #       Re-enable by deleting the next `return 0` line. Everything below
+    #       (module loads + btusb firmware bring-up) stays intact, just skipped. =====
+    return 0
+
     # ---- WiFi: cfg80211 + rtl8821cu (device 0bda:c820) ----
     load cfg80211
     load 8821cu
@@ -37,8 +53,23 @@ start() {
     #      first attempt fairly often. Reload btusb until the controller
     #      firmware is confirmed live ("RTL: fw version" in dmesg).
     #      Run in the background so a slow/flaky download does not stall the
-    #      rest of boot (networking, etc.); S40bluetoothd waits for hci0. ----
+    #      rest of boot (networking, etc.); S40bluetoothd waits for hci0.
+    #      Bail quietly if the dongle isn't attached at all so we don't
+    #      thrash btusb register/deregister for the full retry budget. ----
     (
+        # Wait briefly for USB to enumerate (dongle can be slow), then give
+        # up if no Realtek device ever appears. Backgrounded, so no boot stall.
+        j=0
+        while [ "$j" -lt 8 ]; do
+            rtl_present && break
+            j=$((j + 1))
+            sleep 1
+        done
+        if ! rtl_present; then
+            echo "S30rtldrv: RTL8821CU not attached, skipping BT fw bring-up" > /dev/kmsg 2>/dev/null
+            exit 0
+        fi
+
         n=0
         while [ "$n" -lt 5 ]; do
             n=$((n + 1))

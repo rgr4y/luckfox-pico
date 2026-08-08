@@ -1,0 +1,9 @@
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+    address 10.0.1.13
+    netmask 255.255.255.0
+    gateway 10.0.1.1
+    post-up echo "nameserver 10.0.1.1" > /etc/resolv.conf

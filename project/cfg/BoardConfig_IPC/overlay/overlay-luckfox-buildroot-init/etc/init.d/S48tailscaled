@@ -2,7 +2,22 @@
 
 ENABLED=yes
 PROCS=tailscaled
-ARGS="--state=/opt/var/tailscaled.state --statedir=/opt/var/lib/tailscale --tun=userspace-networking --socks5-server=localhost:1055 &"
+# Kernel TUN mode: load tun.ko (CONFIG_TUN=m) before starting. Falls back to
+# nothing if already loaded (modprobe is idempotent). Requires iptables in PATH
+# (/opt/sbin, Entware) for the ts-input/ts-forward/ts-postrouting netfilter
+# chains; kernel provides the netfilter targets builtin.
+PRECMD="modprobe tun"
+# --operator=rob lets the rob user run tailscale w/o root. tailscaled recreates
+# the socket dir 0700 on every start, so re-open traversal after launch (socket
+# node itself is already 0666; the dir was the blocker).
+POSTCMD="chmod 755 /opt/var/run/tailscale"
+# NOTE: no trailing '&' here — rc.func backgrounds this itself AND appends
+# '> /dev/null 2>&1'. A stray '&' in ARGS terminates the command before that
+# redirect, leaving tailscaled's stdio on the caller's tty; on session/console
+# close it dies via SIGPIPE. Keep the '&' out.
+# Kernel tun (default --tun=tailscale0, --netfilter-mode auto → iptables since
+# no nft). Was previously --tun=userspace-networking --socks5-server=... .
+ARGS="--state=/opt/var/tailscaled.state --statedir=/opt/var/lib/tailscale"
 PREARGS="nohup"
 DESC=$PROCS
 PATH=/opt/sbin:/opt/bin:/opt/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

@@ -1,12 +1,13 @@
 #!/bin/bash
 
 #################################################
-# 	Board Config — Luckfox Pico Pro Max (USB HOST, default)
-#	USB OTG = host (WiFi dongle / host peripherals), dr_mode="host".
-#	For the USB gadget build (usb0 RNDIS) use the *_Peripheral target.
-#	Role is fixed per image (not runtime-switchable) — differs only in dts.
+# 	Board Config — Luckfox Pico Pro Max (USB PERIPHERAL/gadget)
+#	Same as the stock Pro Max SPI NAND config but USB runs as a device
+#	(usb0 RNDIS @ 172.32.0.93) instead of host. Use the plain Pro_Max target
+#	for USB host (WiFi dongle / peripherals). Role isn't runtime-switchable —
+#	pick the target at build/flash time. Differs only in RK_KERNEL_DTS.
 #################################################
-export LF_ORIGIN_BOARD_CONFIG=BoardConfig-SPI_NAND-Buildroot-RV1106_Luckfox_Pico_Pro_Max-IPC.mk
+export LF_ORIGIN_BOARD_CONFIG=BoardConfig-SPI_NAND-Buildroot-RV1106_Luckfox_Pico_Pro_Max_Peripheral-IPC.mk
 # Target CHIP
 export RK_CHIP=rv1106
 
@@ -17,7 +18,7 @@ export RK_APP_TYPE=RKIPC_RV1106
 export RK_BOOTARGS_CMA_SIZE="66M"
 
 # Kernel dts
-export RK_KERNEL_DTS=rv1106g-luckfox-pico-pro-max.dts
+export RK_KERNEL_DTS=rv1106g-luckfox-pico-pro-max-peripheral.dts
 
 #################################################
 #	BOOT_MEDIUM

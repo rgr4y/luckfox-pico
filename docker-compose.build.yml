@@ -4,7 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile.build
     volumes:
-      - /mnt/user/appdata/kvm/luckfox-pico:/sdk
+      # Host SDK path. Defaults to the repo root (compose file dir) so it works
+      # anywhere; override for out-of-tree checkouts, e.g. on the Unraid box:
+      #   LUCKFOX_SDK_DIR=/mnt/user/appdata/kvm/luckfox-pico docker compose ...
+      - ${LUCKFOX_SDK_DIR:-.}:/sdk
     working_dir: /sdk
     command: >
       bash -c "

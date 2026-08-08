@@ -1,0 +1,3 @@
+#!/bin/sh
+# No-op: Rockchip factory test harness (auto_reboot/power_lost_test)
+exit 0

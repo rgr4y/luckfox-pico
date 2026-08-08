@@ -1,0 +1,20 @@
+#!/bin/sh
+# Persistent DHCP on eth0
+# RkLunch runs a one-shot udhcpc that exits after lease. This replaces
+# it with a persistent one that keeps default route + DNS alive.
+case "$1" in
+  start)
+    for i in 1 2 3 4 5; do
+      ip link show eth0 2>/dev/null | grep -q "state UP" && break
+      sleep 1
+    done
+    # Kill stale one-shot udhcpc from RkLunch network_init
+    for p in $(pidof udhcpc); do
+      grep -q "eth0" /proc/$p/cmdline 2>/dev/null && kill $p 2>/dev/null
+    done
+    udhcpc -i eth0 -b -R -p /var/run/udhcpc.eth0.pid -s /usr/share/udhcpc/default.script
+    ;;
+  stop)
+    [ -f /var/run/udhcpc.eth0.pid ] && kill $(cat /var/run/udhcpc.eth0.pid) 2>/dev/null
+    ;;
+esac

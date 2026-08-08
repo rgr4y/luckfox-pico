@@ -69,37 +69,8 @@
 	status = "okay";
 };
 
-/**********SDIO (ESP-Hosted WiFi) — see docs/esp-hosted-sdio-plan.md**********/
-/* Dedicated sdio controller @ff9a0000 (separate from the SD-card sdmmc above).
- * m0 mux = GPIO2_A0-A5 → header pins 21/22/24/25/26/27, verified UNCLAIMED.
- * 4-bit @ 50MHz, 3.3V. Needs ESP-Hosted-NG slave fw + esp32_sdio module. */
-&sdio {
-	bus-width = <4>;
-	cap-sd-highspeed;
-	cap-sdio-irq;
-	keep-power-in-suspend;
-	/* Card-detect instead of non-removable: an empty slot is then SILENT at
-	 * boot (mmc_rescan sees get_cd()==0, powers the host off, no probe/no
-	 * "error -110 whilst initialising SDIO card"). Wire the ESP32's ready/
-	 * present line to GPIO2_A6 (header, next to the SDIO cluster); it pulls
-	 * the pin LOW when the ESP is up = card present. Internal pull-up (below)
-	 * holds it HIGH = no card when the ESP is off/absent, so a board with no
-	 * ESP soldered boots clean. */
-	cd-gpios = <&gpio2 RK_PA6 GPIO_ACTIVE_LOW>;
-	no-1-8-v;
-	max-frequency = <50000000>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&sdmmc1m0_clk &sdmmc1m0_cmd &sdmmc1m0_bus4 &sdio_cd_pin>;
-	status = "okay";
-};
-
-&pinctrl {
-	sdio {
-		sdio_cd_pin: sdio-cd-pin {
-			rockchip,pins = <2 RK_PA6 RK_FUNC_GPIO &pcfg_pull_up>;
-		};
-	};
-};
+/* ESP-Hosted WiFi moved from SDIO to SPI (easier hand-soldering, ~16 Mbps is
+ * plenty for this host). See the &spi0 node below and docs/esp-hosted-spi-plan.md. */
 
 /**********WATCHDOG**********/
 /* dw-wdt (snps,dw-wdt @ff5a0000): on expiry the CRU issues a global soft reset
@@ -130,18 +101,29 @@
 
 &usbdrd_dwc3 {
 	status = "okay";
-	dr_mode = "peripheral";
+	/* HOST by default: brings up the dwc3 xhci so USB peripherals (e.g. the
+	 * rtl8821cu/88x2bu WiFi dongle) enumerate. This disables the gadget path
+	 * (no usb0 RNDIS). For the gadget build see the peripheral DTS variant
+	 * (rv1106g-luckfox-pico-pro-max-peripheral.dts). NOTE: role is NOT
+	 * runtime-switchable under a single-role dr_mode — dwc3 only provisions the
+	 * one stack at probe, so the PHY otg_mode / dwc3 debugfs `mode` levers are
+	 * no-ops. Switching host<->gadget = reflash the other DTS variant. */
+	dr_mode = "host";
 };
 
-/**********SPI**********/
+/**********SPI (ESP-Hosted-NG WiFi co-processor) — see docs/esp-hosted-spi-plan.md**********/
+/* spi0 = bus 0 (alias in rv1106.dtsi). The esp32_spi module registers an
+ * "esp_spi" device on bus0/CS0 (SPI MODE 2) at modprobe — no DT child needed,
+ * it's added programmatically via spi_new_device(). HANDSHAKE/DATA_READY are
+ * GPIO #defines in host/spi/esp_spi.h (56/57 = GPIO1_D0/D1).
+ * m0 mux: CLK=GPIO1_C1(pin14) MOSI=GPIO1_C2(pin15) MISO=GPIO1_C3(pin16)
+ *         CS0=GPIO1_C0(pin12).  HS=pin19(gpio56)  DR=pin20(gpio57).
+ * No ESP soldered? Leave the module out of insmod (it isn't auto-loaded) — an
+ * enabled-but-idle SPI master costs nothing at boot. */
 &spi0 {
-	status = "disabled";
-	spidev@0 {
-		spi-max-frequency = <50000000>;
-	};
-	fbtft@0 {
-		spi-max-frequency = <50000000>;
-	};
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi0m0_pins &spi0m0_cs0>;
 };
 
 /**********I2C**********/

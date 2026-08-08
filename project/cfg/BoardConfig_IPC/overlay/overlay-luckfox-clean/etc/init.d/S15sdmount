@@ -1,0 +1,27 @@
+#!/bin/sh
+# Mount SD card (ext4), set up /opt for Entware, TUN device, swap
+case "$1" in
+  start)
+    if ! mount | grep -q "/dev/mmcblk1p1.*ext4"; then
+      mountpoint -q /mnt/sdcard && umount /mnt/sdcard
+      mkdir -p /mnt/sdcard
+      mount -t ext4 /dev/mmcblk1p1 /mnt/sdcard 2>/dev/null
+    fi
+    if mountpoint -q /mnt/sdcard; then
+      mkdir -p /mnt/sdcard/opt
+      [ ! -L /opt ] && [ ! -e /opt ] && ln -sfn /mnt/sdcard/opt /opt
+      # Swap now handled by zram (S14zram). SD swapfile disabled to avoid
+      # extra flash wear and to keep zram as the sole swap device.
+      # [ -f /mnt/sdcard/swapfile ] && swapon /mnt/sdcard/swapfile 2>/dev/null
+      # swappiness is set by S14zram (=150); do not override here.
+    fi
+    # TUN device for Tailscale/VPN
+    mkdir -p /dev/net
+    [ -c /dev/net/tun ] || mknod /dev/net/tun c 10 200
+    chmod 600 /dev/net/tun
+    ;;
+  stop)
+    swapoff /mnt/sdcard/swapfile 2>/dev/null
+    umount /mnt/sdcard 2>/dev/null
+    ;;
+esac

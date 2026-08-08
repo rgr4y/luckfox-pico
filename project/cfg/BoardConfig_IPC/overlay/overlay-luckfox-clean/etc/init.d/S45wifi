@@ -1,0 +1,44 @@
+#!/bin/sh
+# Bring up WiFi if USB adapter detected and config exists.
+# Config: /mnt/sdcard/wpa_supplicant.conf
+# Generates with: wpa_passphrase "SSID" "password" > /mnt/sdcard/wpa_supplicant.conf
+#
+# The whole bringup (wait-for-wlan -> wpa_supplicant -> associate -> DHCP) runs
+# in a forked subshell so boot NEVER blocks on WiFi. The dongle's wlan0 shows up
+# a few seconds after USB enumerates; there's no reason to hold login for it.
+
+WPA_CONF=/mnt/sdcard/wpa_supplicant.conf
+PID_FILE=/var/run/wpa_supplicant.pid
+
+case "$1" in
+  start)
+    # No config = nothing to do
+    [ -f "$WPA_CONF" ] || exit 0
+
+    (
+      # wait for wlan0 (driver autoloads when the USB dongle enumerates)
+      i=0
+      while [ "$i" -lt 15 ]; do
+        [ -d /sys/class/net/wlan0 ] && break
+        i=$((i + 1)); sleep 1
+      done
+      [ -d /sys/class/net/wlan0 ] || { echo "S45wifi: no wlan0, giving up" > /dev/kmsg 2>&1; exit 0; }
+
+      wpa_supplicant -B -i wlan0 -c "$WPA_CONF" -P "$PID_FILE"
+
+      # wait for association (up to ~15s) instead of a blind sleep, then DHCP.
+      # udhcpc -b backgrounds itself once it has (or fails to get) a lease.
+      j=0
+      while [ "$j" -lt 15 ]; do
+        iw dev wlan0 link 2>/dev/null | grep -q "Connected to" && break
+        j=$((j + 1)); sleep 1
+      done
+      udhcpc -i wlan0 -b -R -p /var/run/udhcpc.wlan0.pid -s /usr/share/udhcpc/default.script
+    ) &
+    ;;
+  stop)
+    [ -f /var/run/udhcpc.wlan0.pid ] && kill $(cat /var/run/udhcpc.wlan0.pid) 2>/dev/null
+    [ -f "$PID_FILE" ] && kill $(cat "$PID_FILE") 2>/dev/null
+    ip link set wlan0 down 2>/dev/null
+    ;;
+esac

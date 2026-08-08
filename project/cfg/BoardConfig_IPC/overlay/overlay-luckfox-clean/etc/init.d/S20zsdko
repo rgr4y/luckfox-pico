@@ -1,0 +1,11 @@
+#!/bin/sh
+# Bind-mount kernel modules from SD card over /oem/usr/ko
+# Allows updating modules without reflashing firmware
+case "$1" in
+  start)
+    if [ -d /mnt/sdcard/ko ] && [ -e /mnt/sdcard/ko/insmod_ko.sh ]; then
+      mountpoint -q /oem/usr/ko || mount --bind /mnt/sdcard/ko /oem/usr/ko
+    fi
+    ;;
+  stop) umount /oem/usr/ko 2>/dev/null ;;
+esac

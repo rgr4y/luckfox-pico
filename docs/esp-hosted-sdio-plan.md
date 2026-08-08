@@ -1,5 +1,9 @@
 # ESP-Hosted over SDIO — add non-USB WiFi to the Luckfox Pico Pro Max
 
+> **SUPERSEDED** — the active path is now **SPI** (easier hand-soldering). See
+> [`esp-hosted-spi-plan.md`](esp-hosted-spi-plan.md). Kept for history/reference
+> (the SDIO empty-slot card-detect trick, mmc core notes, and pin analysis).
+
 Goal: bolt an ESP32 onto the RV1106 as a **native `wlan0`** WiFi NIC over the
 SoC's dedicated (currently unused) SDIO controller — no USB dongle, no stealing
 the SD-card slot. ESP-Hosted-NG (Espressif's "Next Gen", the Linux-host path)
@@ -41,15 +45,16 @@ The `sdio` controller (`sdmmc1` in pinctrl terms) has two pin muxes:
 | D1   | GPIO2_A0     | 64    | **24**     |
 | D2   | GPIO2_A5     | 69    | **22**     |
 | D3   | GPIO2_A4     | 68    | **21**     |
-| CD   | GPIO2_A6     | 70    | I2C3_M0_SCL pad |
+| CD   | GPIO2_A7     | 71    | **34**     |
 
 GND at header pin 23 (adjacent). 3V3 from pin 36 (3V3 OUT).
 
 **CD (card-detect)** is not standard SDIO — it's how we keep an empty slot silent
 (see Step 1). Wire the ESP32's ready/present line (any spare ESP GPIO, driven LOW
-when the ESP is up) to GPIO2_A6. Active-low = card present; an internal pull-up
-holds it HIGH (no card) when the ESP is off/absent, so a board with no ESP boots
-clean. Confirm the GPIO2_A6 pad against the board silkscreen before soldering.
+when the ESP is up) to GPIO2_A7 (header pin 34). Active-low = card present; an
+internal pull-up holds it HIGH (no card) when the ESP is off/absent, so a board
+with no ESP boots clean. Confirm the GPIO2_A7 pad against the board silkscreen
+before soldering.
 
 ### Live-board proof the pins are free
 
@@ -85,7 +90,7 @@ zram kernel went to, so this rides a boot.img rebuild):
 	/* card-detect (NOT non-removable) so an empty slot is silent at boot:
 	 * mmc_rescan sees get_cd()==0 -> powers the host off -> no probe, no
 	 * "error -110 whilst initialising SDIO card". */
-	cd-gpios = <&gpio2 RK_PA6 GPIO_ACTIVE_LOW>;
+	cd-gpios = <&gpio2 RK_PA7 GPIO_ACTIVE_LOW>;
 	no-1-8-v;                 /* ESP32 SDIO slave is 3.3V */
 	max-frequency = <50000000>;
 	pinctrl-names = "default";
@@ -96,7 +101,7 @@ zram kernel went to, so this rides a boot.img rebuild):
 &pinctrl {
 	sdio {
 		sdio_cd_pin: sdio-cd-pin {
-			rockchip,pins = <2 RK_PA6 RK_FUNC_GPIO &pcfg_pull_up>;
+			rockchip,pins = <2 RK_PA7 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 	};
 };
@@ -104,7 +109,7 @@ zram kernel went to, so this rides a boot.img rebuild):
 
 Pinctrl group labels (already defined in `rv1106-pinctrl.dtsi`, `sdmmc1` block):
 `sdmmc1m0_clk`, `sdmmc1m0_cmd`, `sdmmc1m0_bus4` (d0–d3). `sdio_cd_pin` is our
-own group (GPIO2_A6 as GPIO with pull-up) for the ESP ready/present line.
+own group (GPIO2_A7 as GPIO with pull-up) for the ESP ready/present line.
 
 **Why card-detect over `non-removable`:** with `non-removable` the MMC core
 scans the slot once at boot even when empty and logs an SDIO init error; there
@@ -162,13 +167,58 @@ flashcp -v /mnt/sdcard/boot-sdio.img /dev/mtd3
 Rollback: `flashcp -v /mnt/sdcard/mtd3-boot.backup /dev/mtd3` (or the earlier
 zram backup). Worst case: BOOT-button maskrom + `upgrade_tool`.
 
-## Step 4 — ESP32 slave
+## Step 4 — ESP slave = **DFRobot FireBeetle 2 ESP32-C5** (chosen)
 
-- Flash **ESP-Hosted-NG slave firmware** for your ESP32 variant (SDIO transport).
-- ESP32 SDIO-slave pins are **fixed in silicon** (classic ESP32):
-  CLK=IO14, CMD=IO15, D0=IO2, D1=IO4, D2=IO12, D3=IO13. Verify for your exact
-  chip (S3/C-series differ).
-- Wire ESP pins ↔ RV1106 header pins per the map above (CLK↔CLK, etc.).
+Only ESP32 (classic), C5, C6 have the SDIO-**slave** peripheral. S3/C3 are host-
+or SPI-slave-only (their SDMMC block is host-side; no `sdio_slave` IDF driver).
+Picked the **C5** (have one): dual-band WiFi 6 (2.4+5GHz), and it's the throughput
+king — ESP-Hosted-NG bench: **C5 SDIO 5GHz ≈ 63/52 TCP, 97/81 UDP Mbps** vs ESP32
+22.9/15.6 and C6 22.4/25.6. NG supports C5 as a slave (variant table: ESP32,
+C2/C3/C5/C6/C61, S2/S3), cfg80211 → real `wlan0`.
+
+**C5 SDIO-slave GPIOs (fixed IO_MUX, verified vs esp-hosted-mcu `docs/sdio.md`):**
+
+| Signal | C5 GPIO | FireBeetle access            | RV1106 pin / GPIO | 51k PU→3V3 |
+|--------|---------|------------------------------|-------------------|------------|
+| CLK    | IO9     | header `9/SDA`               | 26 / GPIO2_A2     | —          |
+| CMD    | IO10    | header `10/SCL`              | 27 / GPIO2_A3     | **✓**      |
+| D0     | IO8     | header `8/D2`                | 25 / GPIO2_A1     | **✓**      |
+| D1     | IO7     | header `7/D11`               | 24 / GPIO2_A0     | **✓** †    |
+| D2     | IO14    | **USB D+ — R3 pad, lift R3** | 22 / GPIO2_A5     | **✓**      |
+| D3     | IO13    | **USB D- — R2 pad, lift R2** | 21 / GPIO2_A4     | **✓**      |
+| CD/rdy | IO24    | header `24/MO`, drive LOW=up | 34 / GPIO2_A7     | (RV int PU)|
+| GND    | GND     | GND                          | 23                | —          |
+| 3V3    | 3V3     | 3V3 (or self-power via USB-C)| 36                | —          |
+
+- RV1106 pins 21–27 = one block (23=GND mid). C5 side: 4 on headers + 2 tapped.
+- **DAT2/DAT3 = IO14/IO13 = the C5's native USB D±** (schematic: R3=D+/USB_P,
+  R2=D-/USB_N, 22R series). They're NOT on the FireBeetle headers — only at the
+  USB-C data pins. Tap the module side of R2/R3 and **lift R2/R3** to isolate the
+  connector (USB-C then = power + ROM-download only, no runtime USB data — fine
+  for a headless WiFi co-proc). ROM/boot log still comes out **UART0** (default
+  on, datasheet Table 4-5); flash via USB-JTAG download mode (BOOT+RST) *before*
+  lifting R2/R3, or via UART0 after.
+- Pull-ups **mandatory** (Espressif: 51k rec; 10k fine). D2/D3 pull-ups also stop
+  the slave falling into SPI boot mode.
+- **† IO7 (DAT1) is also the JTAG-source strap** (datasheet §4.4): no internal
+  pull, must not be high-Z at boot. The mandatory DAT1 pull-up satisfies that —
+  one resistor, two jobs.
+- **Clock-edge tuning:** GPIO25 + MTDI set SDIO sample/drive edges (Table 4-4,
+  floating default). If the link is flaky at `max-frequency`, flip these before
+  suspecting wiring.
+- **CD/ready:** C5 firmware drives a spare GPIO LOW when its SDIO slave is up →
+  clean enumerate; or tie GPIO2_A7 to C5 GND (present when board attached, may
+  cost one `mmc_rescan`). No C5 → RV pull-up → slot silent.
+
+**Flash order (avoid a chicken-and-egg):** flash the C5 NG slave firmware over
+USB-C *first* (IO13/14 still = USB), then lift R2/R3 + solder the 6 SDIO leads.
+Reflashes after that go over UART0 download mode.
+
+**⚠ host-driver ↔ slave-fw generation — verify before building fw:** the host
+`.ko` we vendored is **ESP-Hosted-NG** (`esp32_sdio.ko`, `target=sdio`). Confirm
+the vendored NG snapshot actually includes **C5** slave support (C5 is recent) —
+if the NG tree is too old, re-vendor latest NG or move host+slave to the unified
+`esp-hosted` stack together (never mix generations across the link).
 
 ---
 
@@ -179,8 +229,10 @@ zram backup). Worst case: BOOT-button maskrom + `upgrade_tool`.
 - **Wire length.** SDIO @ 50 MHz is intolerant of long leads. Short soldered
   jumpers, not long DuPont. If flaky: drop `max-frequency`, or fall back to
   `bus-width = <1>`.
-- **ESP32 strapping pins.** IO2/IO12 are boot-strapping pins — respect
-  ESP-Hosted's documented pull requirements or the ESP won't boot.
+- **C5 strapping pins on the bus.** IO7 (DAT1) = JTAG-source strap (must not be
+  high-Z — the DAT1 pull-up covers it); IO28 (BOOT) = SPI-boot strap; GPIO25/MTDI
+  = SDIO clock-edge select. See Step 4. (N/A note: on a *classic* ESP32 the trap
+  is instead IO12/MTDI = flash-voltage strap → needs `espefuse set_flash_voltage`.)
 - **3.3V only** (`no-1-8-v` set). Do not enable 1.8V signaling.
 
 ## Post-bringup verification

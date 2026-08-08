@@ -8,3 +8,12 @@ project/app/wifi_app/wpa_supplicant.conf
 config/
 sysdrv/tools/board/memtester/memtester-4.6.0/
 sysdrv/tools/board/dosfstools/dosfstools-4.2/
+
+# build-output binaries / debris (never track — bloats history)
+/boot-*.img
+/uboot-*.img
+/*.ko
+/fw_printenv-*
+docs/kbuild*.log
+esp-hosted-slave/
+docs/

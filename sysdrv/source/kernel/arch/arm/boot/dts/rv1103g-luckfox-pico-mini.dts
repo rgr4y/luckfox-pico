@@ -54,6 +54,12 @@
 /**********USB**********/
 &usbdrd_dwc3 {
 	status = "okay";
+	/*
+	 * Peripheral: usb0 gadget net (RNDIS/CDC-NCM) over the single USB-C.
+	 * dwc3 provisions one role at probe (no runtime OTG switch); gadget
+	 * is the network path for this headless board. Switch to "host" only
+	 * for a USB-wifi-dongle build (mutually exclusive with gadget net).
+	 */
 	dr_mode = "peripheral";
 };
 
@@ -88,4 +94,15 @@
 /* PWM1_M0 */
 &pwm1 {
 	status = "disabled";
+};
+
+/**********WATCHDOG**********/
+/*
+ * dw-wdt @ff5a0000. Disabled in rv1106.dtsi by default; enable here so
+ * /dev/watchdog appears. S12watchdog init feeds it; expiry -> CRU global
+ * soft reset (== RESET button), boot mode latched to BOOT_WATCHDOG.
+ * NOWAYOUT is off in the kernel so clean stop/reboot disarms via 'V'.
+ */
+&wdt {
+	status = "okay";
 };

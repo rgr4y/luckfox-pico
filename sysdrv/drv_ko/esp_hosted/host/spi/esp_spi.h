@@ -9,9 +9,12 @@
 
 #include "esp.h"
 
-#define HANDSHAKE_PIN           22
+/* RV1106 Luckfox Pico Pro Max: HS on header pin 19 = GPIO1_D0 = 56,
+ * DR on header pin 20 = GPIO1_D1 = 57 (Luckfox gpio# = bank*32 + group*8 + X).
+ * Both are host inputs w/ IRQ; ESP (C5 IO9/IO2) drives them. */
+#define HANDSHAKE_PIN           56
 #define SPI_IRQ                 gpio_to_irq(HANDSHAKE_PIN)
-#define SPI_DATA_READY_PIN      27
+#define SPI_DATA_READY_PIN      57
 #define SPI_DATA_READY_IRQ      gpio_to_irq(SPI_DATA_READY_PIN)
 #define SPI_BUF_SIZE            1600
 

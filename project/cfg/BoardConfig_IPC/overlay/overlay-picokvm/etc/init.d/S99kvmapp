@@ -1,0 +1,62 @@
+#!/bin/sh
+# PicoKVM main app launcher.
+# kvm_app is a Go supervisor; it spawns the native kvm_video / kvm_display /
+# kvm_vpn helpers. Those helpers link librockit.so (+ mpp/rga/rknn) which live
+# ONLY in /oem/usr/lib, and the prebuilt kvm_video blob ships with no usable
+# RPATH — so the loader path MUST be set here or the helpers die with
+# "can't load library 'librockit.so'" (exit 16) and the UI shows
+# "ctrl socket not connected". LD_LIBRARY_PATH is inherited by the children.
+#
+# The helpers ALSO need the Rockchip media/MPP kernel modules loaded first
+# (rockit.ko -> /dev/mpi/*, video_rkcif/rkisp + tc35874x -> /dev/v4l-subdev*).
+# Those are loaded by /oem/usr/ko/insmod_ko.sh (which the old vendor post_chk
+# used to run). Without them kvm_video dies with "Failed to open /dev/mpi/*" /
+# "Error initializing video" (exit 255) and loops. insmod_ko.sh is
+# self-contained (stops/starts the udev queue, rmmods unused camera sensors,
+# backgrounds the wifi load).
+
+APP=/userdata/picokvm/bin/kvm_app
+LOG=/tmp/kvm_app.log
+KO_DIR=/oem/usr/ko
+
+case "$1" in
+start)
+    [ -x "$APP" ] || { echo "S99kvmapp: $APP not present, skipping"; exit 0; }
+
+    # Load Rockchip media/MPP kernel modules before the app (idempotent:
+    # re-insmod of loaded modules is a harmless no-op).
+    if [ -f "$KO_DIR/insmod_ko.sh" ]; then
+        echo "S99kvmapp: loading media kernel modules"
+        ( cd "$KO_DIR" && sh insmod_ko.sh )
+        udevadm settle -t 10 2>/dev/null
+    fi
+
+    # kvm_app lives on /userdata — make sure it is mounted.
+    cnt=0
+    while [ $cnt -lt 30 ]; do
+        cnt=$((cnt + 1))
+        mount | grep -qw userdata && break
+        sleep .1
+    done
+
+    export LD_LIBRARY_PATH=/oem/usr/lib:$LD_LIBRARY_PATH
+    "$APP" > "$LOG" 2>&1 &
+    echo "S99kvmapp: kvm_app started"
+    ;;
+stop)
+    kill -TERM "$(pidof kvm_app)" 2>/dev/null
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        pidof kvm_app >/dev/null 2>&1 || break
+        sleep .3
+    done
+    pidof kvm_app >/dev/null 2>&1 && kill -KILL "$(pidof kvm_app)" 2>/dev/null
+    ;;
+restart | reload)
+    "$0" stop
+    "$0" start
+    ;;
+*)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac

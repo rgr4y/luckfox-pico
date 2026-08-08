@@ -1,0 +1,37 @@
+#!/bin/sh
+# Anti-lockout: guarantee every login-capable account has a working shell.
+#
+# Runs right after S15optmount so /opt (Entware) shells are already mounted and
+# can be validated. Any account with uid 0 (root) or uid >= 1000 (humans) whose
+# login shell is missing/non-executable — e.g. a dangling /opt/bin/bash symlink
+# when /opt failed to mount, or a hand-edited /etc/passwd — is rewritten to a
+# shell that always exists in the rootfs. Intentional nologin/false shells are
+# executable, so they pass and are left alone. Idempotent.
+
+case "$1" in
+  start) ;;
+  stop) exit 0 ;;
+  *) echo "Usage: $0 {start|stop}"; exit 1 ;;
+esac
+
+# Pick a fallback shell that actually exists (busybox sh is always present).
+FALLBACK=/bin/sh
+[ -x "$FALLBACK" ] || FALLBACK=/bin/ash
+[ -x "$FALLBACK" ] || FALLBACK=/bin/busybox
+[ -x "$FALLBACK" ] || exit 0   # nothing to fall back to; don't make it worse
+
+changed=0
+while IFS=: read -r user _ uid _ _ _ shell; do
+  # Only guard root and real user accounts.
+  [ "$uid" = 0 ] || [ "$uid" -ge 1000 ] 2>/dev/null || continue
+  # -x follows symlinks, so a dangling /opt/* link counts as invalid.
+  [ -n "$shell" ] && [ -x "$shell" ] && continue
+  [ "$shell" = "$FALLBACK" ] && continue
+  # Replace field 7 (shell) only, keep fields 1-6.
+  sed -i "s|^\(${user}:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:\).*|\1${FALLBACK}|" /etc/passwd
+  echo "antilockout: ${user} shell '${shell:-<empty>}' invalid -> ${FALLBACK}"
+  changed=1
+done < /etc/passwd
+
+[ "$changed" = 1 ] && sync
+exit 0

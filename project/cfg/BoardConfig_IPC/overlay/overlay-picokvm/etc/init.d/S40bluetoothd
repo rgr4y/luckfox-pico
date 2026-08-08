@@ -9,14 +9,19 @@ case "$1" in
     start)
         [ -x "$BLUETOOTHD" ] || exit 0
         pidof bluetoothd >/dev/null 2>&1 && exit 0
-        # Wait for hci0 (S30rtldrv loads btusb + downloads firmware)
-        i=0
-        while [ "$i" -lt 15 ]; do
-            [ -e /sys/class/bluetooth/hci0 ] && break
-            i=$((i + 1))
-            sleep 1
-        done
-        setsid "$BLUETOOTHD" >/var/log/bluetoothd.log 2>&1 </dev/null &
+        # Wait for hci0 (S30rtldrv loads btusb + downloads firmware) in the
+        # background so a missing dongle doesn't block boot for 15s, and only
+        # launch bluetoothd if the controller actually came up.
+        (
+            i=0
+            while [ "$i" -lt 15 ]; do
+                [ -e /sys/class/bluetooth/hci0 ] && break
+                i=$((i + 1))
+                sleep 1
+            done
+            [ -e /sys/class/bluetooth/hci0 ] || exit 0
+            setsid "$BLUETOOTHD" >/var/log/bluetoothd.log 2>&1 </dev/null &
+        ) &
         ;;
     stop)
         killall bluetoothd 2>/dev/null

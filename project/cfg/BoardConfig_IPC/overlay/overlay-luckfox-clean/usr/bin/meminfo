@@ -1,0 +1,23 @@
+#!/bin/sh
+# meminfo — quick memory breakdown for RV1106
+
+total_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+avail_kb=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
+used_kb=$((total_kb - avail_kb))
+cma_total=$(awk '/CmaTotal/ {print $2}' /proc/meminfo)
+cma_free=$(awk '/CmaFree/ {print $2}' /proc/meminfo)
+cma_used=$((cma_total - cma_free))
+swap_total=$(awk '/SwapTotal/ {print $2}' /proc/meminfo)
+swap_used=$(awk '/SwapFree/ {v=$2} END {print '$swap_total'-v}' /proc/meminfo)
+
+# DMA heap (ISP/encoder/RGA/RKNN)
+dma_total=$(awk '/Total:/ {print $2}' /proc/rk_dma_heap/alloc_bitmap 2>/dev/null)
+dma_used=$(awk '/Used:/ {print $2}' /proc/rk_dma_heap/alloc_bitmap 2>/dev/null)
+
+printf "%-12s %6s / %-6s MB\n" "OS RAM:" "$((used_kb/1024))" "$((total_kb/1024))"
+printf "%-12s %6s / %-6s MB  (ISP/encoder/RGA/NPU)\n" "CMA/DMA:" "$((cma_used/1024))" "$((cma_total/1024))"
+if [ -n "$dma_total" ]; then
+  printf "%-12s %6s / %-6s KB  (hw alloc)\n" "DMA heap:" "$dma_used" "$dma_total"
+fi
+printf "%-12s %6s / %-6s MB\n" "Swap:" "$((swap_used/1024))" "$((swap_total/1024))"
+printf "%-12s %6s MB\n" "Available:" "$((avail_kb/1024))"

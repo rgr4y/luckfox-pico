@@ -1,0 +1,3 @@
+#!/bin/sh
+# No-op: AIC8800 Bluetooth init — no BT hardware on Pico Pro Max
+exit 0
