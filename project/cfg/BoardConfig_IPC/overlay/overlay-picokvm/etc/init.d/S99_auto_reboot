@@ -1,3 +1,0 @@
-#!/bin/sh
-# Disabled for PicoKVM
-exit 0
