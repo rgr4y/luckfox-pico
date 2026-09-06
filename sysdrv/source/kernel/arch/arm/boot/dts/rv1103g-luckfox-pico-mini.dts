@@ -12,6 +12,13 @@
 / {
 	model = "Luckfox Pico Mini";
 	compatible = "rockchip,rv1103g-38x38-ipc-v10", "rockchip,rv1103";
+
+	/* MCP2515 CAN controller reference oscillator (8 MHz crystal on module) */
+	mcp2515_osc: mcp2515-osc {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <8000000>;
+	};
 };
 
 /**********SFC**********/
@@ -60,15 +67,24 @@
 	 * is the network path for this headless board. Switch to "host" only
 	 * for a USB-wifi-dongle build (mutually exclusive with gadget net).
 	 */
-	dr_mode = "peripheral";
+	dr_mode = "host";  /* host: USB-wifi dongle (RTL8821CU) + CAN build */
 };
 
-/**********SPI**********/
-/* SPI0_M0 */
+/**********SPI - MCP2515 CAN (CAN-B; set 50k/29-bit at runtime via ip link)**********/
+/* SPI0_M0; MCP2515 INT on pin10 = GPIO1_C4 */
 &spi0 {
-	status = "disabled";
-	spidev@0 {
-		spi-max-frequency = <50000000>;
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi0m0_pins &spi0m0_cs0>;
+
+	can@0 {
+		compatible = "microchip,mcp2515";
+		reg = <0>;
+		spi-max-frequency = <10000000>;
+		clocks = <&mcp2515_osc>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <RK_PC4 IRQ_TYPE_LEVEL_LOW>;
+		status = "okay";
 	};
 };
 
